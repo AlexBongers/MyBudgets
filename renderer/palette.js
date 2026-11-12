@@ -10,6 +10,7 @@ function openPalette() {
     { g: 'Ga naar', icon: '→', label: 'Instellingen', run: () => go('settings') },
     { g: 'Acties', icon: '📥', label: 'Rabobank CSV importeren…', hint: '⌘O', run: guard(async () => { if (window.native) importFiles(await window.native.openCSV()); else go('import'); }) },
     { g: 'Acties', icon: '⬇️', label: 'Transacties exporteren (CSV)', hint: '⇧⌘E', run: guard(exportCSV) },
+    ...(window.native ? [{ g: 'Acties', icon: '📄', label: 'Dit scherm exporteren als PDF', hint: '⌘P', run: guard(async () => { if (await window.native.exportPDF(`MyBudgets-${S.tab}-${S.month || ''}.pdf`)) toast('PDF opgeslagen'); }) }] : []),
     { g: 'Acties', icon: '↻', label: 'Alles opnieuw categoriseren', run: guard(async () => { const r = await POST('/recategorize'); await refreshMeta(); toast(`${r.changed} transactie(s) opnieuw ingedeeld`); }) },
     { g: 'Acties', icon: '🆕', label: 'Nieuwe regel…', run: () => ruleModal() },
     ...S.cats.map(c => ({ g: 'Categorieën', icon: c.icon, label: c.name, hint: c.grp, run: () => openCategory(c.id) })),

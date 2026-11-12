@@ -145,6 +145,21 @@ svg text{fill:var(--muted);font-size:11px;font-family:inherit}
 .cat-input{width:200px;max-width:100%}
 kbd{background:var(--hover);border-radius:4px;padding:0 5px;font:inherit;font-size:11px}
 hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+/* afdrukken / PDF: alleen de inhoud, altijd licht */
+@media print{
+  :root:root:root{--bg:#fff;--card:#fff;--text:#1d1d1f;--muted:#6e6e73;--faint:#a1a1a6;--line:rgba(0,0,0,.12);--hover:rgba(0,0,0,.04);--accent:#007aff;--accent-soft:rgba(0,122,255,.12);--good:#248a3d;--bad:#d70015;--warn:#c93400;--shadow:none;color-scheme:light}
+  html,body{height:auto;overflow:visible;background:#fff}
+  #app{display:block;height:auto}
+  .sidebar,#palettebtn,#importbtn,#prev,#next,.banner,.bulkbar,#toast,.filters,#modal-root{display:none!important}
+  .content{display:block}
+  main{overflow:visible;padding:0}
+  .toolbar{position:static;height:auto;border:0;padding:0 0 14px}
+  .card{break-inside:avoid;box-shadow:none}
+  .g4{grid-template-columns:repeat(4,1fr)}.g2,.g21{grid-template-columns:1fr 1fr}
+  .kpi .v{font-size:20px}
+  .tablewrap{overflow:visible}
+  .page,.page *{animation:none!important;opacity:1!important;transform:none!important}
+}
 /* toegankelijkheid en beweging */
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}

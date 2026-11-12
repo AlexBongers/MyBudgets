@@ -64,6 +64,7 @@ if (window.native) {
     else if (m.action === 'import-dialog') importFiles(await window.native.openCSV());
     else if (m.action === 'import-files') importFiles(m.files);
     else if (m.action === 'export') exportCSV();
+    else if (m.action === 'pdf') { if (await window.native.exportPDF(`MyBudgets-${S.tab}-${S.month || ''}.pdf`)) toast('PDF opgeslagen'); }
     else if (m.action === 'backup') { if (await window.native.backup()) toast('Back-up gemaakt'); }
     else if (m.action === 'restore') window.native.restore();
     else if (m.action === 'undo') { if (document.activeElement?.matches('input,textarea')) document.execCommand('undo'); else doUndo(); }

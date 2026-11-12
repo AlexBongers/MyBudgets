@@ -12,5 +12,6 @@ contextBridge.exposeInMainWorld('native', {
   restore: () => ipcRenderer.invoke('db:restore'),
   reveal: () => ipcRenderer.invoke('shell:reveal'),
   setTheme: t => ipcRenderer.invoke('theme:set', t),
+  exportPDF: name => ipcRenderer.invoke('export:pdf', name),
   onMenu: cb => ipcRenderer.on('menu', (_e, m) => cb(m)),
 });

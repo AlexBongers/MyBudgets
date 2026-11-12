@@ -84,6 +84,13 @@ ipcMain.handle('db:restore', async () => {
   for (const ext of ['-wal', '-shm']) if (existsSync(dbPath + ext)) unlinkSync(dbPath + ext);
   app.relaunch(); app.exit(0); return true;
 });
+// Het huidige scherm als PDF (print-CSS verbergt zijbalk en knoppen)
+ipcMain.handle('export:pdf', async (_e, name) => {
+  const r = await dialog.showSaveDialog(win, { defaultPath: name || 'MyBudgets.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+  if (r.canceled || !r.filePath) return false;
+  const pdf = await win.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { marginType: 'default' } });
+  writeFileSync(r.filePath, pdf); return true;
+});
 ipcMain.handle('theme:set', (_e, t) => { nativeTheme.themeSource = ['light', 'dark'].includes(t) ? t : 'system'; return true; });
 ipcMain.handle('shell:reveal', () => { shell.showItemInFolder(dbPath); return true; });
 
@@ -94,6 +101,7 @@ function buildMenu() {
     { label: 'Bestand', submenu: [
       { label: 'Rabobank CSV importeren…', accelerator: 'CmdOrCtrl+O', click: () => send({ action: 'import-dialog' }) },
       { label: 'Transacties exporteren (CSV)…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send({ action: 'export' }) },
+      { label: 'Dit scherm exporteren als PDF…', accelerator: 'CmdOrCtrl+P', click: () => send({ action: 'pdf' }) },
       { type: 'separator' },
       { label: 'Back-up maken…', click: () => send({ action: 'backup' }) },
       { label: 'Back-up herstellen…', click: () => send({ action: 'restore' }) },
