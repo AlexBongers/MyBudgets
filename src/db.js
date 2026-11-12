@@ -72,9 +72,22 @@ function migrate(db) {
     const ins = db.prepare('INSERT INTO rules (pattern, category_id) VALUES (?,?)');
     old.forEach(r => ins.run(r.pattern, r.category_id));
   }
+  db.exec(`CREATE TABLE IF NOT EXISTS splits (
+    id INTEGER PRIMARY KEY, tx_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL, amount INTEGER NOT NULL, note TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS splits_tx ON splits(tx_id);
+  DROP VIEW IF EXISTS tl;
+  -- 'tl' = transactieregels: gesplitste transacties zijn vervangen door hun delen (voor budget en rapporten)
+  CREATE VIEW tl AS
+    SELECT t.id, t.date, t.amount, t.payee, t.description, t.account_id, t.merchant, t.category_id FROM transactions t
+      WHERE NOT EXISTS (SELECT 1 FROM splits s WHERE s.tx_id = t.id)
+    UNION ALL
+    SELECT t.id, t.date, s.amount, t.payee, t.description, t.account_id, t.merchant, s.category_id FROM splits s JOIN transactions t ON t.id = s.tx_id;`);
   db.exec(`CREATE INDEX IF NOT EXISTS tx_date ON transactions(date);
            CREATE INDEX IF NOT EXISTS tx_merchant ON transactions(merchant);
-           CREATE INDEX IF NOT EXISTS tx_cat ON transactions(category_id);`);
+           CREATE INDEX IF NOT EXISTS tx_cat ON transactions(category_id);
+           CREATE INDEX IF NOT EXISTS tx_amount ON transactions(amount);`);
   if (v < SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -173,7 +186,32 @@ export function recategorize(db, cz = loadCategorizer(db)) {
       if (cat !== r.category_id) changed++;
     }
   }
-  return changed;
+  return changed + linkTransfers(db);
+}
+
+// Tegengestelde bedragen op twee eigen rekeningen (binnen 3 dagen) zijn samen een overboeking,
+// ook als de IBAN's niet bekend zijn. Eén-op-één, kleinste datumverschil eerst.
+export function linkTransfers(db) {
+  const cat = db.prepare("SELECT id FROM categories WHERE key='transfer'").get()
+    || db.prepare("SELECT id FROM categories WHERE kind='transfer' ORDER BY id LIMIT 1").get();
+  if (!cat || db.prepare('SELECT COUNT(*) c FROM accounts').get().c < 2) return 0;
+  const pairs = db.prepare(`SELECT a.id aid, b.id bid, ABS(julianday(a.date) - julianday(b.date)) d, a.account_id aa, b.account_id ba FROM transactions a
+    JOIN transactions b ON b.amount = -a.amount AND a.amount < 0 AND b.account_id <> a.account_id AND ABS(julianday(a.date) - julianday(b.date)) <= 3
+    LEFT JOIN categories ca ON ca.id=a.category_id LEFT JOIN categories cb ON cb.id=b.category_id
+    WHERE a.confirmed=0 AND b.confirmed=0 AND a.account_id IS NOT NULL AND b.account_id IS NOT NULL
+      AND (a.cat_source IS NULL OR a.cat_conf < ${AUTO_THRESHOLD - 0.001} OR ca.kind='transfer' OR a.cat_source='pair')
+      AND (b.cat_source IS NULL OR b.cat_conf < ${AUTO_THRESHOLD - 0.001} OR cb.kind='transfer' OR b.cat_source='pair')
+    ORDER BY d, a.id, b.id`).all();
+  const name = db.prepare('SELECT name FROM accounts WHERE id=?');
+  const up = db.prepare("UPDATE transactions SET category_id=?, cat_source='pair', cat_conf=0.9, cat_reason=? WHERE id=? AND (category_id IS NOT ? OR cat_source IS NOT 'pair')");
+  const used = new Set(); let n = 0;
+  for (const p of pairs) {
+    if (used.has(p.aid) || used.has(p.bid)) continue;
+    used.add(p.aid); used.add(p.bid);
+    n += up.run(cat.id, `Overboeking naar ${name.get(p.ba)?.name || 'eigen rekening'}`, p.aid, cat.id).changes;
+    n += up.run(cat.id, `Overboeking van ${name.get(p.aa)?.name || 'eigen rekening'}`, p.bid, cat.id).changes;
+  }
+  return n;
 }
 
 // ---------- handmatig indelen + leren ----------
@@ -239,5 +277,5 @@ export function restore(db, snap) {
 }
 
 export function resetAll(db) {
-  db.exec('DELETE FROM transactions; DELETE FROM memory; DELETE FROM budgets; DELETE FROM accounts;');
+  db.exec('DELETE FROM splits; DELETE FROM transactions; DELETE FROM memory; DELETE FROM budgets; DELETE FROM accounts;');
 }

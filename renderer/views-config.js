@@ -88,7 +88,7 @@ function howTab() {
     <p>Bij elke import loopt een transactie langs onderstaande lagen. De eerste laag die iets herkent wint. Alles met een zekerheid onder 80% belandt in <b>Te beoordelen</b>.</p>
     <ol class="steps">
       <li><b>Jouw regels</b> — expliciete voorwaarden op tegenpartij, omschrijving, IBAN, bedrag en richting. Altijd zekerheid 100%.</li>
-      <li><b>Eigen rekeningen</b> — betalingen naar een rekening die je zelf hebt geïmporteerd zijn overboekingen en tellen niet mee als uitgave.</li>
+      <li><b>Eigen rekeningen</b> — betalingen naar een rekening die je zelf hebt geïmporteerd zijn overboekingen en tellen niet mee als uitgave. Ook tegengestelde bedragen op twee eigen rekeningen binnen 3 dagen worden aan elkaar gekoppeld.</li>
       <li><b>Geheugen</b> — eerder door jou ingedeelde tegenpartijen. Zodra je “Jumbo” één keer indeelt, volgen alle Jumbo-pinbetalingen, ongeacht winkelnummer of plaats.</li>
       <li><b>Woordenboek</b> — ruim 600 bekende Nederlandse winkels, energieleveranciers, verzekeraars, abonnementen en instanties. Generieke woorden (“cafe”, “hotel”) geven alleen een suggestie.</li>
       <li><b>Rabobank-code</b> — bijvoorbeeld geldopnames bij een geldautomaat.</li>

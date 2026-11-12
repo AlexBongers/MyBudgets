@@ -1,6 +1,6 @@
 'use strict';
 const V = {};
-const SRC = { rule: 'regel', own: 'eigen rekening', memory: 'geleerd', builtin: 'bekend', heur: 'afgeleid', ml: 'suggestie', manual: 'handmatig' };
+const SRC = { pair: 'overboeking', rule: 'regel', own: 'eigen rekening', memory: 'geleerd', builtin: 'bekend', heur: 'afgeleid', ml: 'suggestie', manual: 'handmatig' };
 
 function emptyHero() {
   return `<div class="hero"><div class="big">🌷</div><h2>Welkom bij MyBudgets</h2>
@@ -118,7 +118,7 @@ V.transactions = async () => {
     const tag = t.confirmed || t.cat_source === 'manual' ? '' : weak ? `<span class="tag warn" title="${esc(t.cat_reason)}">controleer</span>` : t.cat_source ? `<span class="tag" title="${esc(t.cat_reason)}">${SRC[t.cat_source] || 'auto'}</span>` : '';
     return `<tr data-id="${t.id}"><td><input type="checkbox" class="sel" ${selected.has(t.id) ? 'checked' : ''}></td><td class="nowrap">${fmtDay(t.date)}</td>
       <td><div class="tx-name"><a href="#" class="open" style="color:inherit;text-decoration:none">${esc(t.payee)}</a>${t.notes ? ' 📝' : ''}</div><div class="small muted" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description)}</div></td>
-      <td><div class="row" style="flex-wrap:nowrap">${catSelect(t.category_id, { none: '❔ kies…', cls: 'cat-input rowcat' })}${tag}</div></td>
+      <td>${t.split_count ? `<button class="btn sm open-split" title="Splitsing bekijken of wijzigen">✂️ Gesplitst · ${t.split_count} delen</button>` : `<div class="row" style="flex-wrap:nowrap">${catSelect(t.category_id, { none: '❔ kies…', cls: 'cat-input rowcat' })}${tag}</div>`}</td>
       <td class="num ${t.amount < 0 ? '' : 'pos'}"><b>${eur(t.amount)}</b></td></tr>`;
   };
   const load = guard(async (append) => {
@@ -160,7 +160,7 @@ V.transactions = async () => {
       toast(r.similar ? `Opgeslagen · ${r.similar} vergelijkbare automatisch ingedeeld` : 'Opgeslagen', r.undo); await refreshMeta(); reload();
     }
   }));
-  $('#rows').addEventListener('click', e => { const a = e.target.closest('a.open'); if (a) { e.preventDefault(); txDetail(+a.closest('tr').dataset.id); } });
+  $('#rows').addEventListener('click', e => { const a = e.target.closest('a.open'); if (a) { e.preventDefault(); txDetail(+a.closest('tr').dataset.id); } const b = e.target.closest('.open-split'); if (b) splitModal(+b.closest('tr').dataset.id); });
   await load(false);
   if (f.focusSearch) { $('#q').focus(); delete f.focusSearch; }
 };
@@ -176,9 +176,44 @@ async function txDetail(id) {
       <label>Categorie</label><div>${catChip(c)}</div>
       <label>Waarom?</label><div class="muted">${esc(row.cat_reason || (row.category_id ? '' : 'Geen categorie gevonden'))} ${row.cat_source ? `<span class="tag">${SRC[row.cat_source]}</span>` : ''}</div>
       <label>Notitie</label><textarea id="note" rows="2" placeholder="Eigen notitie…">${esc(row.notes)}</textarea></div>
-    <div class="foot"><button class="btn danger" id="del">Verwijderen</button><span class="spacer" style="flex:1"></span><button class="btn" id="rule">Regel maken…</button><button class="btn" id="same">Overzicht partij</button><button class="btn primary" id="save">Opslaan</button></div>`);
+    <div class="foot"><button class="btn danger" id="del">Verwijderen</button><span class="spacer" style="flex:1"></span><button class="btn" id="split">✂️ Splitsen…</button><button class="btn" id="rule">Regel maken…</button><button class="btn" id="same">Overzicht partij</button><button class="btn primary" id="save">Opslaan</button></div>`);
   m.$('#save').onclick = guard(async () => { await PATCH('/transactions/' + id, { notes: m.$('#note').value }); m.close(); toast('Opgeslagen'); V.transactions(); });
   m.$('#same').onclick = () => { m.close(); openMerchant(row.merchant); };
+  m.$('#split').onclick = () => { m.close(); splitModal(id); };
   m.$('#rule').onclick = () => { m.close(); ruleModal(null, { field: 'payee', op: 'contains', pattern: row.payee, category_id: row.category_id }); };
   m.$('#del').onclick = guard(async () => { if (await ask('Transactie verwijderen?', 'Dit kan niet ongedaan worden gemaakt. Bij een nieuwe import komt hij weer terug.', 'Verwijderen', true)) { await DEL('/transactions/' + id); m.close(); toast('Verwijderd'); await refreshMeta(); V.transactions(); } });
+}
+
+// ---------- splitsen ----------
+async function splitModal(id) {
+  const t = await GET('/transactions/' + id);
+  const total = Math.abs(t.amount), sign = Math.sign(t.amount);
+  let parts = t.splits.length ? t.splits.map(s => ({ ...s, amount: Math.abs(s.amount) }))
+    : [{ category_id: t.category_id, amount: total, note: '' }, { category_id: null, amount: 0, note: '' }];
+  const m = modal(`<h3>Splitsen: ${esc(t.payee)}</h3><p class="muted" style="margin-top:-6px">${fmtDate(t.date)} · totaal <b>${eur(total)}</b>. Verdeel het bedrag over meerdere categorieën, bijvoorbeeld boodschappen en huishouden bij één kassabon.</p>
+    <div id="parts" class="stack"></div><div class="row between" style="margin-top:10px"><button class="btn sm" id="addp">+ Deel toevoegen</button><b id="rest"></b></div>
+    <div class="foot">${t.splits.length ? '<button class="btn danger" id="unsplit">Splitsing opheffen</button><span style="flex:1"></span>' : ''}<button class="btn" data-close>Annuleren</button><button class="btn primary" id="save">Opslaan</button></div>`, { wide: true });
+  const draw = () => {
+    m.$('#parts').innerHTML = parts.map((p, i) => `<div class="row" style="flex-wrap:nowrap" data-i="${i}">${catSelect(p.category_id, { none: '— categorie —', attrs: 'data-f="cat"' })}
+      <input type="number" step="0.01" min="0" data-f="amt" value="${p.amount ? (p.amount / 100).toFixed(2) : ''}" placeholder="0,00" style="width:110px;text-align:right"><input data-f="note" value="${esc(p.note || '')}" placeholder="Notitie (optioneel)" style="flex:1">
+      ${parts.length > 2 ? '<button class="btn sm danger" data-f="del">✕</button>' : ''}</div>`).join('');
+    const rest = total - parts.reduce((a, p) => a + p.amount, 0);
+    m.$('#rest').innerHTML = rest === 0 ? '<span class="pos">✓ Volledig verdeeld</span>' : `<span class="${rest < 0 ? 'neg' : 'muted'}">Nog te verdelen: ${eur(rest)}</span>`;
+    m.$('#save').disabled = rest !== 0 || parts.some(p => !p.category_id || !p.amount);
+  };
+  m.$('#parts').addEventListener('change', e => {
+    const row = e.target.closest('[data-i]'); if (!row) return; const p = parts[+row.dataset.i], f = e.target.dataset.f;
+    if (f === 'cat') p.category_id = Number(e.target.value) || null;
+    else if (f === 'amt') p.amount = Math.max(0, Math.round(Number(e.target.value) * 100) || 0);
+    else if (f === 'note') p.note = e.target.value;
+    draw();
+  });
+  m.$('#parts').addEventListener('click', e => { const row = e.target.closest('[data-i]'); if (row && e.target.dataset.f === 'del') { parts.splice(+row.dataset.i, 1); draw(); } });
+  m.$('#addp').onclick = () => { parts.push({ category_id: null, amount: Math.max(0, total - parts.reduce((a, p) => a + p.amount, 0)), note: '' }); draw(); };
+  m.$('#save').onclick = guard(async () => {
+    await PUT('/transactions/' + id + '/split', { parts: parts.map(p => ({ category_id: p.category_id, amount: sign * p.amount, note: p.note })) });
+    m.close(); await refreshMeta(); toast('Splitsing opgeslagen'); go(S.tab);
+  });
+  m.$('#unsplit')?.addEventListener('click', guard(async () => { await DEL('/transactions/' + id + '/split'); m.close(); await refreshMeta(); toast('Splitsing opgeheven'); go(S.tab); }));
+  draw();
 }

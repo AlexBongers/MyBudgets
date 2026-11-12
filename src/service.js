@@ -36,14 +36,14 @@ export function createApi(db, ctx = {}) {
     return one(`SELECT
       COALESCE(SUM(CASE WHEN ${INCOME} THEN t.amount END),0) AS income,
       COALESCE(-SUM(CASE WHEN ${EXPENSE} THEN t.amount END),0) AS expenses
-      FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=?`, m);
+      FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=?`, m);
   }
   function spentByCat(m) {
-    return Object.fromEntries(q(`SELECT category_id c, -SUM(amount) s FROM transactions WHERE substr(date,1,7)=? AND category_id IS NOT NULL GROUP BY category_id`, m).map(r => [r.c, r.s]));
+    return Object.fromEntries(q(`SELECT category_id c, -SUM(amount) s FROM tl WHERE substr(date,1,7)=? AND category_id IS NOT NULL GROUP BY category_id`, m).map(r => [r.c, r.s]));
   }
   function budgetRows(m) {
     const spent = spentByCat(m);
-    const avg = Object.fromEntries(q(`SELECT category_id c, -SUM(amount)/3.0 a FROM transactions WHERE substr(date,1,7) IN (?,?,?) AND category_id IS NOT NULL GROUP BY category_id`,
+    const avg = Object.fromEntries(q(`SELECT category_id c, -SUM(amount)/3.0 a FROM tl WHERE substr(date,1,7) IN (?,?,?) AND category_id IS NOT NULL GROUP BY category_id`,
       addMonths(m, -1), addMonths(m, -2), addMonths(m, -3)).map(r => [r.c, Math.round(r.a)]));
     return q(`SELECT c.id, c.name, c.color, c.icon, c.grp,
         (SELECT amount FROM budgets b WHERE b.category_id=c.id AND b.month<=? ORDER BY month DESC LIMIT 1) AS budget,
@@ -81,7 +81,7 @@ export function createApi(db, ctx = {}) {
       const tb = d.budget.reduce((a, b) => a + b.budget, 0);
       out.push({ type: tb && d.projection.expenses > tb ? 'warn' : 'info', text: `Op dit tempo kom je uit op ${eur(d.projection.expenses)} aan uitgaven${tb ? ` (budget ${eur(tb)})` : ''}.` });
     }
-    const big = one(`SELECT t.payee, -t.amount a FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} ORDER BY t.amount LIMIT 1`, m);
+    const big = one(`SELECT t.payee, -t.amount a FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} ORDER BY t.amount LIMIT 1`, m);
     if (big) out.push({ type: 'info', text: `Grootste uitgave: ${big.payee} (${eur(big.a)}).` });
     if (totals.income > 0) {
       const rate = Math.round((totals.income - totals.expenses) / totals.income * 100);
@@ -96,16 +96,16 @@ export function createApi(db, ctx = {}) {
     const totals = monthTotals(m), prevMonth = addMonths(m, -1), prevTotals = monthTotals(prevMonth);
     const prevSpent = spentByCat(prevMonth);
     const byCategory = q(`SELECT c.id, COALESCE(c.name,'Niet gecategoriseerd') name, COALESCE(c.color,'#9ca3af') color, COALESCE(c.icon,'❔') icon, -SUM(t.amount) value
-      FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY c.id HAVING value > 0 ORDER BY value DESC`, m)
+      FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY c.id HAVING value > 0 ORDER BY value DESC`, m)
       .map(c => ({ ...c, prev: prevSpent[c.id] ?? 0 }));
     const trend = []; for (let i = 11; i >= 0; i--) { const mm = addMonths(m, -i); trend.push({ month: mm, ...monthTotals(mm) }); }
     const topPayees = q(`SELECT MAX(t.payee) payee, t.merchant, MAX(COALESCE(c.icon,'❔')) icon, -SUM(t.amount) value, COUNT(*) n
-      FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY t.merchant HAVING value > 0 ORDER BY value DESC LIMIT 8`, m);
+      FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY t.merchant HAVING value > 0 ORDER BY value DESC LIMIT 8`, m);
     const budget = budgetRows(m).filter(b => b.budget > 0 || b.spent > 0);
     // cumulatieve uitgaven per dag (deze + vorige maand)
     const cum = mm => {
       const n = daysIn(mm), per = Array(n + 1).fill(0);
-      q(`SELECT CAST(substr(t.date,9,2) AS INTEGER) d, -SUM(t.amount) v FROM transactions t LEFT JOIN categories c ON c.id=t.category_id
+      q(`SELECT CAST(substr(t.date,9,2) AS INTEGER) d, -SUM(t.amount) v FROM tl t LEFT JOIN categories c ON c.id=t.category_id
         WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY d`, mm).forEach(r => { per[r.d] = r.v; });
       let s = 0; return per.slice(1).map(v => (s += v));
     };
@@ -118,7 +118,7 @@ export function createApi(db, ctx = {}) {
     if (isCurrent && totals.expenses > 0) {
       // vaste lasten: wat al betaald is + wat nog verwacht wordt; variabel: huidig tempo
       const dom = +today.slice(8, 10), mset = new Set(rec.map(r => r.merchant));
-      const paid = q(`SELECT t.merchant, -SUM(t.amount) v FROM transactions t WHERE substr(t.date,1,7)=? AND t.amount<0 GROUP BY t.merchant`, m)
+      const paid = q(`SELECT t.merchant, -SUM(t.amount) v FROM tl t WHERE substr(t.date,1,7)=? AND t.amount<0 GROUP BY t.merchant`, m)
         .filter(r => mset.has(r.merchant));
       const paidSet = new Set(paid.map(r => r.merchant)), paidSum = paid.reduce((a, r) => a + r.v, 0);
       const remaining = rec.filter(r => !paidSet.has(r.merchant) && r.next.slice(0, 7) === m && r.next > today).reduce((a, r) => a + r.amount, 0);
@@ -142,7 +142,7 @@ export function createApi(db, ctx = {}) {
     if (p.get('status') === 'review') where.push(REVIEW);
     if (p.get('status') === 'uncategorized') where.push('t.category_id IS NULL');
     if (p.get('category') === 'none') where.push('t.category_id IS NULL');
-    else if (p.get('category')) { where.push('t.category_id=?'); args.push(Number(p.get('category'))); }
+    else if (p.get('category')) { where.push('(t.category_id=? OR EXISTS (SELECT 1 FROM splits s WHERE s.tx_id=t.id AND s.category_id=?))'); args.push(Number(p.get('category')), Number(p.get('category'))); }
     if (p.get('account')) { where.push('t.account_id=?'); args.push(Number(p.get('account'))); }
     if (p.get('merchant')) { where.push('t.merchant=?'); args.push(p.get('merchant')); }
     if (p.get('type') === 'in') where.push('t.amount>0'); if (p.get('type') === 'out') where.push('t.amount<0');
@@ -152,7 +152,7 @@ export function createApi(db, ctx = {}) {
     const dir = p.get('dir') === 'asc' ? 'ASC' : 'DESC';
     const limit = Math.min(Number(p.get('limit')) || 300, 2000), offset = Number(p.get('offset')) || 0;
     const rows = q(`SELECT t.id, t.date, t.amount, t.payee, t.description, t.category_id, t.cat_source, t.cat_conf, t.cat_reason,
-        t.confirmed, t.notes, t.merchant, t.account_id, t.counter_iban, t.code
+        t.confirmed, t.notes, t.merchant, t.account_id, t.counter_iban, t.code, (SELECT COUNT(*) FROM splits s WHERE s.tx_id=t.id) split_count
       FROM transactions t ${W} ORDER BY ${sort} ${dir}, t.id DESC LIMIT ${limit} OFFSET ${offset}`, ...args);
     const agg = one(`SELECT COUNT(*) n, COALESCE(SUM(t.amount),0) sum FROM transactions t ${W}`, ...args);
     return { rows, total: agg.n, sum: agg.sum };
@@ -176,11 +176,11 @@ export function createApi(db, ctx = {}) {
   function report(m, months) {
     const list = []; for (let i = months - 1; i >= 0; i--) list.push(addMonths(m, -i));
     const from = list[0] + '-01', to = list[list.length - 1] + '-31';
-    const cells = q(`SELECT c.id, c.kind, substr(t.date,1,7) mo, SUM(t.amount) v FROM transactions t JOIN categories c ON c.id=t.category_id
+    const cells = q(`SELECT c.id, c.kind, substr(t.date,1,7) mo, SUM(t.amount) v FROM tl t JOIN categories c ON c.id=t.category_id
       WHERE t.date>=? AND t.date<=? AND c.kind<>'transfer' GROUP BY c.id, mo`, from, to);
     const cats = q(`SELECT c.id, c.name, c.kind, c.color, c.icon, c.grp FROM categories c WHERE c.kind<>'transfer' ORDER BY c.kind DESC, ${GRP_ORDER}, c.grp, c.name`);
     const map = {}; cells.forEach(r => { (map[r.id] ||= {})[r.mo] = r.kind === 'income' ? r.v : -r.v; });
-    const unc = q(`SELECT substr(date,1,7) mo, SUM(amount) v FROM transactions WHERE category_id IS NULL AND date>=? AND date<=? GROUP BY mo`, from, to);
+    const unc = q(`SELECT substr(date,1,7) mo, SUM(amount) v FROM tl WHERE category_id IS NULL AND date>=? AND date<=? GROUP BY mo`, from, to);
     // inkomen: positieve bedragen; uitgaven: positief = uitgave (terugbetalingen verlagen)
     const rows = cats.map(c => ({ ...c, values: list.map(mo => map[c.id]?.[mo] ?? 0) })).filter(r => r.values.some(v => v !== 0));
     return { months: list, rows, uncategorized: list.map(mo => -(unc.find(u => u.mo === mo)?.v ?? 0)), totals: list.map(mo => monthTotals(mo)) };
@@ -196,22 +196,22 @@ export function createApi(db, ctx = {}) {
       if (!c) throw httpErr(404, 'Categorie niet gevonden');
       where = 't.category_id=?'; args = [c.id]; kind = c.kind; head = { type: 'category', id: c.id, title: c.name, icon: c.icon, color: c.color, group: c.grp, kind: c.kind };
     } else if (p.get('merchant')) {
-      const t = one('SELECT payee, category_id FROM transactions WHERE merchant=? ORDER BY date DESC LIMIT 1', p.get('merchant'));
+      const t = one('SELECT payee, category_id FROM tl WHERE merchant=? ORDER BY date DESC LIMIT 1', p.get('merchant'));
       if (!t) throw httpErr(404, 'Tegenpartij niet gevonden');
       where = 't.merchant=?'; args = [p.get('merchant')];
       head = { type: 'merchant', merchant: p.get('merchant'), title: t.payee, icon: '🏪', color: '#6b7280' };
     } else throw httpErr(400, 'category of merchant vereist');
-    const rows = q(`SELECT substr(t.date,1,7) mo, SUM(t.amount) v, COUNT(*) n FROM transactions t WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY mo`, ...args, from, to);
+    const rows = q(`SELECT substr(t.date,1,7) mo, SUM(t.amount) v, COUNT(*) n FROM tl t WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY mo`, ...args, from, to);
     const net = rows.reduce((a, r) => a + r.v, 0), sign = kind === 'income' || (head.type === 'merchant' && net > 0) ? 1 : -1;
     const by = Object.fromEntries(rows.map(r => [r.mo, r.v * sign]));
     const monthly = list.map(mo => ({ month: mo, value: by[mo] ?? 0 }));
     const total = monthly.reduce((a, r) => a + r.value, 0), count = rows.reduce((a, r) => a + r.n, 0);
     const active = monthly.filter(r => r.value !== 0).length;
-    const biggest = one(`SELECT t.payee, t.date, t.amount FROM transactions t WHERE ${where} AND t.date>=? AND t.date<=? ORDER BY ${sign === 1 ? 't.amount DESC' : 't.amount ASC'} LIMIT 1`, ...args, from, to);
-    const merchants = head.type === 'category' ? q(`SELECT t.merchant, MAX(t.payee) name, SUM(t.amount)*? v, COUNT(*) n FROM transactions t WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY t.merchant ORDER BY v DESC LIMIT 10`, sign, ...args, from, to) : [];
-    const categories = head.type === 'merchant' ? q(`SELECT c.id, COALESCE(c.name,'Zonder categorie') name, COALESCE(c.icon,'❔') icon, COALESCE(c.color,'#9ca3af') color, SUM(t.amount)*? v, COUNT(*) n FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY c.id ORDER BY v DESC`, sign, ...args, from, to) : [];
-    const recent = q(`SELECT t.id, t.date, t.amount, t.payee, t.description, t.category_id FROM transactions t WHERE ${where} ORDER BY t.date DESC, t.id DESC LIMIT 12`, ...args);
-    const first = one(`SELECT MIN(t.date) d FROM transactions t WHERE ${where}`, ...args).d;
+    const biggest = one(`SELECT t.payee, t.date, t.amount FROM tl t WHERE ${where} AND t.date>=? AND t.date<=? ORDER BY ${sign === 1 ? 't.amount DESC' : 't.amount ASC'} LIMIT 1`, ...args, from, to);
+    const merchants = head.type === 'category' ? q(`SELECT t.merchant, MAX(t.payee) name, SUM(t.amount)*? v, COUNT(*) n FROM tl t WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY t.merchant ORDER BY v DESC LIMIT 10`, sign, ...args, from, to) : [];
+    const categories = head.type === 'merchant' ? q(`SELECT c.id, COALESCE(c.name,'Zonder categorie') name, COALESCE(c.icon,'❔') icon, COALESCE(c.color,'#9ca3af') color, SUM(t.amount)*? v, COUNT(*) n FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY c.id ORDER BY v DESC`, sign, ...args, from, to) : [];
+    const recent = q(`SELECT t.id, t.date, t.amount, t.payee, t.description, t.category_id FROM tl t WHERE ${where} ORDER BY t.date DESC, t.id DESC LIMIT 12`, ...args);
+    const first = one(`SELECT MIN(t.date) d FROM tl t WHERE ${where}`, ...args).d;
     return { ...head, months: list, monthly, total, count, avg: Math.round(total / n), avgActive: active ? Math.round(total / active) : 0, active, biggest, merchants, categories, recent, first, sign };
   }
 
@@ -245,7 +245,35 @@ export function createApi(db, ctx = {}) {
     'GET /api/transactions': (_, __, u) => listTransactions(u),
     'GET /api/transactions/:id': (_, { id }) => {
       const t = one('SELECT id, date, amount, payee, description, category_id, cat_source, cat_conf, cat_reason, confirmed, notes, merchant, account_id, counter_iban, code FROM transactions WHERE id=?', id);
-      if (!t) throw httpErr(404, 'Transactie niet gevonden'); return t;
+      if (!t) throw httpErr(404, 'Transactie niet gevonden');
+      return { ...t, splits: q('SELECT category_id, amount, note FROM splits WHERE tx_id=? ORDER BY id', id) };
+    },
+    'PUT /api/transactions/:id/split': (b, { id }) => {
+      const t = one('SELECT amount FROM transactions WHERE id=?', id);
+      if (!t) throw httpErr(404, 'Transactie niet gevonden');
+      const parts = Array.isArray(b.parts) ? b.parts : [];
+      if (parts.length < 2) throw httpErr(400, 'Een splitsing heeft minimaal 2 delen');
+      let sum = 0;
+      for (const p of parts) {
+        if (!Number.isInteger(p.amount) || p.amount === 0 || Math.sign(p.amount) !== Math.sign(t.amount)) throw httpErr(400, 'Elk deel moet hetzelfde teken hebben als de transactie');
+        if (p.category_id) needCat(p.category_id); else throw httpErr(400, 'Elk deel heeft een categorie nodig');
+        sum += p.amount;
+      }
+      if (sum !== t.amount) throw httpErr(400, `De delen tellen op tot ${sum / 100}, maar de transactie is ${t.amount / 100}`);
+      db.exec('BEGIN');
+      try {
+        run('DELETE FROM splits WHERE tx_id=?', id);
+        const ins = db.prepare('INSERT INTO splits (tx_id, category_id, amount, note) VALUES (?,?,?,?)');
+        for (const p of parts) ins.run(id, p.category_id, p.amount, String(p.note || '').slice(0, 200));
+        run("UPDATE transactions SET category_id=NULL, cat_source='split', cat_conf=1, cat_reason='Gesplitst', confirmed=1 WHERE id=?", id);
+        db.exec('COMMIT');
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
+      return { ok: true };
+    },
+    'DELETE /api/transactions/:id/split': (_, { id }) => {
+      run('DELETE FROM splits WHERE tx_id=?', id);
+      run("UPDATE transactions SET category_id=NULL, cat_source=NULL, cat_conf=0, cat_reason='', confirmed=0 WHERE id=? AND cat_source='split'", id);
+      return { ok: true, changed: recategorize(db) };
     },
     'PATCH /api/transactions/:id': (b, { id }) => {
       const t = one('SELECT * FROM transactions WHERE id=?', id);

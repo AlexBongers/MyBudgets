@@ -150,3 +150,55 @@ test('detail-API: categorie en tegenpartij', async () => {
   assert.equal(m.sign, 1); assert.ok(m.total > 0); assert.equal(m.categories[0].name, 'Salaris');
   await assert.rejects(() => api('GET', '/api/detail'), /vereist/);
 });
+
+test('overboeking tussen twee eigen rekeningen wordt gekoppeld zonder bekende IBAN', () => {
+  const db = openDb(':memory:');
+  const hdr = '"IBAN/BBAN","Munt","Volgnr","Datum","Bedrag","Tegenrekening IBAN/BBAN","Naam tegenpartij","Omschrijving-1"';
+  const a = [hdr, '"NL01RABO0000000001","EUR","1","2026-05-02","-200,00","","Onbekend potje","verplaatst"', '"NL01RABO0000000001","EUR","2","2026-05-03","-9,99","","Kruidvat","x"'].join('\n');
+  const b = [hdr, '"NL02RABO0000000002","EUR","1","2026-05-03","+200,00","","Onbekend potje","verplaatst"', '"NL02RABO0000000002","EUR","2","2026-05-04","+9,99","","Vriend","terug"'].join('\n');
+  importTransactions(db, parseRabobank(a));
+  importTransactions(db, parseRabobank(b));
+  const rows = db.prepare("SELECT amount, category_id, cat_source, cat_reason FROM transactions WHERE abs(amount)=20000").all();
+  assert.equal(rows.length, 2);
+  for (const r of rows) { assert.equal(r.category_id, id('transfer')); assert.equal(r.cat_source, 'pair'); }
+  assert.match(rows.find(r => r.amount < 0).cat_reason, /Overboeking naar/);
+  // bevestigde transacties worden niet aangeraakt
+  // toevallig tegengesteld bedrag, maar een kant is een zekere winkel (Kruidvat): geen overboeking
+  const kv = db.prepare("SELECT cat_source, category_id FROM transactions WHERE abs(amount)=999").all();
+  assert.ok(kv.every(r => r.cat_source !== 'pair' && r.category_id !== id('transfer')));
+});
+
+test('splitsen: budget/rapport tellen delen mee, validatie, ongedaan maken', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:'); const api = createApi(db);
+  importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  const t = db.prepare("SELECT id, amount, date FROM transactions WHERE merchant='jumbo' AND amount<-5000 ORDER BY date DESC LIMIT 1").get();
+  const month = t.date.slice(0, 7);
+  const before = (await api('GET', '/api/budget?month=' + month)).find(r => r.id === id('groceries')).spent;
+  const half = Math.round(t.amount / 2);
+  await assert.rejects(() => api('PUT', `/api/transactions/${t.id}/split`, { parts: [{ category_id: id('groceries'), amount: half }] }), /minimaal 2/);
+  await assert.rejects(() => api('PUT', `/api/transactions/${t.id}/split`, { parts: [{ category_id: id('groceries'), amount: half }, { category_id: id('home'), amount: half - 1 }] }), /tellen op/);
+  await api('PUT', `/api/transactions/${t.id}/split`, { parts: [{ category_id: id('groceries'), amount: half }, { category_id: id('home'), amount: t.amount - half }] });
+  const after = (await api('GET', '/api/budget?month=' + month)).find(r => r.id === id('groceries')).spent;
+  assert.equal(before - after, Math.abs(t.amount - half)); // dat deel is naar 'home' verhuisd
+  const home = (await api('GET', '/api/budget?month=' + month)).find(r => r.id === id('home')).spent;
+  assert.equal(home, Math.abs(t.amount - half));
+  const list = await api('GET', '/api/transactions?category=' + id('home') + '&month=' + month);
+  assert.ok(list.rows.some(r => r.id === t.id && r.split_count === 2));
+  const d = await api('GET', '/api/transactions/' + t.id); assert.equal(d.splits.length, 2);
+  await api('DELETE', `/api/transactions/${t.id}/split`);
+  const back = (await api('GET', '/api/budget?month=' + month)).find(r => r.id === id('groceries')).spent;
+  assert.equal(back, before);
+});
+
+test('alle leesroutes werken op demodata (smoke)', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:'); const api = createApi(db);
+  importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  for (const path of ['/api/dashboard', '/api/dashboard?month=2026-03', '/api/report?months=6', '/api/recurring', '/api/review', '/api/rules', '/api/memory',
+    '/api/accounts', '/api/categories', '/api/budget?month=2026-10', '/api/transactions?status=review', '/api/export', '/api/search?q=jumbo']) {
+    const r = await api('GET', path); assert.ok(r, path);
+  }
+  const d = await api('GET', '/api/dashboard?month=2026-10');
+  assert.equal(d.totals.income, 315000); assert.ok(d.review > 0); assert.equal(d.byCategory[0].name, 'Huur / hypotheek');
+});
