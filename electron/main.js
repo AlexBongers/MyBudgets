@@ -1,8 +1,9 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session, nativeTheme, screen } from 'electron';
-import { readFileSync, writeFileSync, copyFileSync, existsSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, copyFileSync, existsSync, unlinkSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openDb } from '../src/db.js';
+import { openDb, backupTo } from '../src/db.js';
 import { createApi, demoCSVFrom } from '../src/service.js';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
@@ -66,24 +67,52 @@ ipcMain.handle('dialog:save', async (_e, name, text) => {
   if (r.canceled || !r.filePath) return false;
   writeFileSync(r.filePath, text, 'utf8'); return true;
 });
+const backupDir = () => { const d = join(app.getPath('userData'), 'backups'); mkdirSync(d, { recursive: true }); return d; };
 ipcMain.handle('db:backup', async () => {
   const stamp = new Date().toISOString().slice(0, 10);
   const r = await dialog.showSaveDialog(win, { defaultPath: `MyBudgets-backup-${stamp}.db`, filters: [{ name: 'Database', extensions: ['db'] }] });
   if (r.canceled || !r.filePath) return false;
-  if (existsSync(r.filePath)) unlinkSync(r.filePath);
-  db.exec(`VACUUM INTO '${r.filePath.replace(/'/g, "''")}'`);
+  backupTo(db, r.filePath);
   return true;
 });
-ipcMain.handle('db:restore', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Back-up kiezen', properties: ['openFile'], filters: [{ name: 'Database', extensions: ['db'] }] });
-  if (r.canceled || !r.filePaths[0]) return false;
+
+// Herstellen: eerst controleren dat het echt een MyBudgets-database is, dan een veiligheidskopie van de huidige gegevens maken.
+function validBackup(path) {
+  let t = null;
+  try { t = new DatabaseSync(path, { readOnly: true }); return t.prepare("SELECT COUNT(*) c FROM sqlite_master WHERE name IN ('transactions','categories')").get().c === 2; }
+  catch { return false; } finally { try { t?.close(); } catch { /* niets */ } }
+}
+async function restoreFrom(file) {
+  if (!validBackup(file)) { await dialog.showMessageBox(win, { type: 'error', message: 'Dit is geen geldige MyBudgets-back-up.' }); return false; }
   const ok = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Annuleren', 'Vervangen'], defaultId: 0, cancelId: 0,
-    message: 'Back-up herstellen?', detail: 'Je huidige gegevens worden vervangen door de back-up. De app start daarna opnieuw.' });
+    message: 'Back-up herstellen?', detail: 'Je huidige gegevens worden vervangen door de back-up. Er wordt eerst een veiligheidskopie van je huidige gegevens gemaakt. De app start daarna opnieuw.' });
   if (ok.response !== 1) return false;
-  db.close(); copyFileSync(r.filePaths[0], dbPath);
+  backupTo(db, join(backupDir(), `voor-herstel-${new Date().toISOString().replace(/[:.]/g, '-')}.db`));
+  db.close(); copyFileSync(file, dbPath);
   for (const ext of ['-wal', '-shm']) if (existsSync(dbPath + ext)) unlinkSync(dbPath + ext);
   app.relaunch(); app.exit(0); return true;
+}
+ipcMain.handle('db:restore', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Back-up kiezen', properties: ['openFile'], filters: [{ name: 'Database', extensions: ['db'] }] });
+  return r.canceled || !r.filePaths[0] ? false : restoreFrom(r.filePaths[0]);
 });
+ipcMain.handle('backups:list', () => {
+  try { const d = backupDir(); return readdirSync(d).filter(f => f.endsWith('.db')).map(f => ({ name: f, size: statSync(join(d, f)).size, mtime: statSync(join(d, f)).mtimeMs })).sort((x, y) => y.mtime - x.mtime); }
+  catch { return []; }
+});
+ipcMain.handle('backups:restore', (_e, name) => (/^[\w.-]+\.db$/.test(name) ? restoreFrom(join(backupDir(), name)) : false));
+ipcMain.handle('backups:reveal', () => { shell.openPath(backupDir()); return true; });
+
+// Dagelijkse automatische back-up (laatste 14 bewaard; 'voor-herstel'-kopieën worden nooit automatisch gewist)
+function autoBackup() {
+  try {
+    if (!db || db.prepare('SELECT COUNT(*) c FROM transactions').get().c === 0) return;
+    const dir = backupDir(), file = join(dir, `budget-${new Date().toISOString().slice(0, 10)}.db`);
+    if (!existsSync(file)) backupTo(db, file);
+    const all = readdirSync(dir).filter(f => /^budget-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort();
+    for (const f of all.slice(0, Math.max(0, all.length - 14))) unlinkSync(join(dir, f));
+  } catch (e) { console.error('Automatische back-up mislukt:', e); }
+}
 // Het huidige scherm als PDF (print-CSS verbergt zijbalk en knoppen)
 ipcMain.handle('export:pdf', async (_e, name) => {
   const r = await dialog.showSaveDialog(win, { defaultPath: name || 'MyBudgets.pdf', filters: [{ name: 'PDF', extensions: ['pdf'] }] });
@@ -125,8 +154,8 @@ app.on('open-file', (e, p) => { e.preventDefault(); if (win?.webContents && !win
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_w, _p, cb) => cb(false));
-  startDb(); buildMenu(); createWindow();
+  startDb(); autoBackup(); buildMenu(); createWindow();
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 app.on('window-all-closed', () => { if (!isMac) app.quit(); });
-app.on('before-quit', () => { try { db?.close(); } catch { /* al gesloten */ } });
+app.on('before-quit', () => { autoBackup(); try { db?.close(); } catch { /* al gesloten */ } });

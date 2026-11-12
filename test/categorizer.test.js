@@ -309,3 +309,18 @@ test('terugkerend maandelijks inkomen wordt als salaris voorgesteld (suggestie, 
   const db2 = openDb(':memory:'); importTransactions(db2, parseRabobank([hdr, rows[0]].join('\n')));
   assert.equal(db2.prepare('SELECT category_id FROM transactions').get().category_id, null);
 });
+
+test('back-up: consistente kopie die als database te openen is, ook met bestaand doelbestand', async () => {
+  const { mkdtempSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+  const { backupTo } = await import('../src/db.js');
+  const dir = mkdtempSync(join(tmpdir(), 'mybudgets-bk-'));
+  const db = openDb(join(dir, 'budget.db'));
+  importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  const n = db.prepare('SELECT COUNT(*) c FROM transactions').get().c;
+  const target = join(dir, "back'up.db");           // aanhalingsteken in de bestandsnaam
+  backupTo(db, target); backupTo(db, target);        // tweede keer overschrijft
+  const copy = openDb(target);
+  assert.equal(copy.prepare('SELECT COUNT(*) c FROM transactions').get().c, n);
+  assert.equal(copy.prepare('SELECT COUNT(*) c FROM categories').get().c > 20, true);
+  copy.close(); db.close();
+});

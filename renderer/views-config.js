@@ -152,6 +152,7 @@ async function exportCSV() {
 }
 V.settings = async () => {
   const [accs, imports] = await Promise.all([GET('/accounts'), GET('/imports')]); S.accounts = accs;
+  const backups = window.native?.backups ? await window.native.backups.list() : [];
   const theme = pref.get('theme') || 'system';
   const m = render(`<div class="grid g2">
     <div class="card"><h2>Weergave</h2><div class="row between"><span>Thema</span><div class="seg" id="theme">${[['system', 'Systeem'], ['light', 'Licht'], ['dark', 'Donker']].map(([v, l]) => `<button data-v="${v}" class="${theme === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
@@ -162,9 +163,14 @@ V.settings = async () => {
       ${window.native ? `<div class="row"><button class="btn" id="bk">Back-up maken…</button><button class="btn" id="rs">Back-up herstellen…</button><button class="btn" id="rv">Toon in Finder</button></div>` : ''}
       <p class="muted small" style="margin:0">Je gegevens staan lokaal in één databasebestand. Maak regelmatig een back-up (bijv. naar iCloud Drive of Time Machine).</p><hr>
       <div class="row"><button class="btn" id="demo">Voorbeelddata laden</button><button class="btn danger" id="wipe">Alles wissen…</button></div></div></div>
+    ${backups.length ? `<div class="card" style="grid-column:1/-1"><h2>Automatische back-ups <span class="right"><a href="#" id="bkreveal">Toon map</a></span></h2>
+      <p class="muted small" style="margin-top:-4px">MyBudgets maakt elke dag een back-up (laatste 14 dagen bewaard). Herstellen maakt eerst een veiligheidskopie van je huidige gegevens.</p>
+      <table><tbody>${backups.slice(0, 8).map(b => `<tr><td>${esc(b.name)}</td><td class="muted small">${new Date(b.mtime).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</td><td class="num muted small">${(b.size / 1048576).toFixed(1)} MB</td><td class="num"><button class="btn sm" data-restore-bk="${esc(b.name)}">Herstellen…</button></td></tr>`).join('')}</tbody></table></div>` : ''}
     <div class="card" style="grid-column:1/-1"><h2>Importgeschiedenis</h2>${imports.length ? `<table><thead><tr><th>Bestand</th><th>Geïmporteerd op</th><th>Periode</th><th class="num">Transacties</th><th></th></tr></thead><tbody>
       ${imports.map(i => `<tr><td>${esc(i.name || '(naamloos)')}</td><td class="muted small">${esc(i.created.slice(0, 16).replace('T', ' '))}</td><td class="muted small">${i.from_date ? fmtDate(i.from_date) + ' – ' + fmtDate(i.to_date) : ''}</td><td class="num">${i.n}</td><td class="num"><button class="btn sm danger" data-undo-import="${i.id}" data-n="${i.n}">Terugdraaien</button></td></tr>`).join('')}</tbody></table>
       <p class="muted small" style="margin-bottom:0">Terugdraaien verwijdert alle transacties van die import. Het geleerde geheugen blijft bewaard.</p>` : '<div class="empty">Nog geen imports.</div>'}</div></div>`);
+  $('#bkreveal')?.addEventListener('click', e => { e.preventDefault(); window.native.backups.reveal(); });
+  $$('[data-restore-bk]').forEach(b => b.addEventListener('click', guard(() => window.native.backups.restore(b.dataset.restoreBk))));
   $$('[data-undo-import]').forEach(b => b.addEventListener('click', guard(async () => {
     if (!(await ask('Import terugdraaien?', `${b.dataset.n} transactie(s) van deze import worden verwijderd.`, 'Terugdraaien', true))) return;
     const r = await DEL('/imports/' + b.dataset.undoImport); await refreshMeta(); toast(`${r.deleted} transacties verwijderd`); V.settings();

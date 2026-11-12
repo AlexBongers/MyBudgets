@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { Categorizer, AUTO_THRESHOLD } from './categorizer.js';
 import { merchantKey, displayName, tokensOf, tidyDescription } from './normalize.js';
@@ -303,6 +303,13 @@ export function restore(db, snap) {
     for (const m of snap.memory) ins.run(m.key, m.category_id, m.n, m.label);
     return recategorize(db);
   });
+}
+
+// Consistente kopie van de database (ook midden in een schrijfactie veilig, werkt met WAL).
+export function backupTo(db, path) {
+  if (existsSync(path)) unlinkSync(path);
+  db.exec(`VACUUM INTO '${String(path).replace(/'/g, "''")}'`);
+  return path;
 }
 
 export function resetAll(db) {
