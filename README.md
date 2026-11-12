@@ -85,6 +85,34 @@ Verder: opdrachtpalet **⌘K**, meerdere rekeningen, donker/licht, native menu, 
 
 Sneltoetsen: ⌘O importeren · ⌘K zoeken/navigeren · ⌘1–8 schermen · ⌘[ ⌘] vorige/volgende maand · ⌘Z ongedaan maken · ⇧⌘E exporteren.
 
+## Als server draaien (Proxmox / Docker) — voor meerdere gebruikers
+
+Dezelfde app draait ook als webserver op je thuisnetwerk: jij en je partner openen hem in de browser op bijv.
+`http://192.168.1.50:3000` en zien altijd dezelfde, actuele gegevens (één database op de server). Geen npm-dependencies nodig; alleen Node ≥ 22.13 of Docker.
+
+**Docker (op een VM of LXC met Docker in Proxmox):**
+
+```bash
+git clone https://github.com/AlexBongers/MyBudgets && cd MyBudgets
+cp .env.example .env        # zet in .env een lang wachtwoord
+docker compose up -d --build
+```
+
+**Zonder Docker (bijv. in een LXC met Node):**
+
+```bash
+HOST=0.0.0.0 PORT=3000 MYBUDGETS_PASSWORD='lang-wachtwoord' DB_PATH=/var/lib/mybudgets/budget.db node src/server.js
+```
+
+(Maak er een systemd-service van met `Restart=always` voor opstarten bij boot.)
+
+- Inloggen: de browser vraagt om een wachtwoord (gebruikersnaam mag leeg of iets zijn). Zonder `MYBUDGETS_PASSWORD` weigert de server te starten zodra `HOST` niet localhost is.
+- Gegevens: `data/budget.db`; elke dag een back-up in `data/backups` (14 bewaard). Zet `data/` in je Proxmox-back-upschema. In Instellingen is een back-up te downloaden.
+- **Je bestaande gegevens meenemen:** maak op je Mac een back-up (Instellingen → Back-up maken), zet het bestand als `data/budget.db` op de server (server eerst stoppen) en start opnieuw.
+- Samen tegelijk werken kan; SQLite is hier ruim snel genoeg voor twee gebruikers. Verander je dezelfde transactie tegelijk, dan wint de laatste.
+- Zet de server niet rechtstreeks op internet. Wil je buitenshuis erbij: gebruik een VPN (WireGuard/Tailscale) of een reverse proxy met HTTPS (bij HTTP gaat het wachtwoord leesbaar over het netwerk).
+- In de browser ontbreken de Mac-specifieke functies (menu, PDF-export via ⌘P, native bestandsdialogen); importeren (Rabobank-CSV, Actual-ZIP) werkt via bestanden kiezen of slepen. Gebruik Ctrl+P → "Opslaan als pdf" van de browser.
+
 ## Privacy en beveiliging
 
 - Alle gegevens staan lokaal in één SQLite-bestand; er gaat niets het internet op.

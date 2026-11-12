@@ -1,0 +1,9 @@
+services:
+  mybudgets:
+    build: .
+    restart: unless-stopped
+    ports: ["3000:3000"]
+    environment:
+      MYBUDGETS_PASSWORD: "${MYBUDGETS_PASSWORD:?zet een wachtwoord in .env}"
+    volumes:
+      - ./data:/data      # database + dagelijkse back-ups (data/backups)

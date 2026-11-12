@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.6.0
+- **Servermodus** (Docker/Proxmox): `HOST`/`PORT`/`MYBUDGETS_PASSWORD`, wachtwoordbeveiliging (HTTP Basic), dagelijkse back-ups, back-up downloaden, Dockerfile en compose-bestand. Meerdere gebruikers zien dezelfde gegevens.
+- Windows-build (installer en portable `.exe`) via GitHub Actions.
+
 ## 2.5.0
 - **Jaaroverzicht**: kerncijfers, maandgrafiek, inkomsten per bron, uitgaven per categorie met verloop door het jaar, top tegenpartijen en grootste uitgaven. Vergelijkt alleen met vorig jaar als dat vanaf januari data heeft, en dan over dezelfde periode.
 
