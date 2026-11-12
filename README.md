@@ -107,7 +107,7 @@ HOST=0.0.0.0 PORT=3000 MYBUDGETS_PASSWORD='lang-wachtwoord' DB_PATH=/var/lib/myb
 (Maak er een systemd-service van met `Restart=always` voor opstarten bij boot.)
 
 - Inloggen: de browser vraagt om een wachtwoord (gebruikersnaam mag leeg of iets zijn). Zonder `MYBUDGETS_PASSWORD` weigert de server te starten zodra `HOST` niet localhost is.
-- Gegevens: `data/budget.db`; elke dag een back-up in `data/backups` (14 bewaard). Zet `data/` in je Proxmox-back-upschema. In Instellingen is een back-up te downloaden.
+- Gegevens: `data/budget.db`; elke dag een back-up in `data/backups` (14 bewaard). Zet `data/` in je Proxmox-back-upschema. In Instellingen kun je een back-up downloaden én herstellen (de server start daarna zelf opnieuw; dat werkt door `restart: unless-stopped` in het compose-bestand).
 - **Je bestaande gegevens meenemen:** maak op je Mac een back-up (Instellingen → Back-up maken), zet het bestand als `data/budget.db` op de server (server eerst stoppen) en start opnieuw.
 - Samen tegelijk werken kan; SQLite is hier ruim snel genoeg voor twee gebruikers. Verander je dezelfde transactie tegelijk, dan wint de laatste.
 - Zet de server niet rechtstreeks op internet. Wil je buitenshuis erbij: gebruik een VPN (WireGuard/Tailscale) of een reverse proxy met HTTPS (bij HTTP gaat het wachtwoord leesbaar over het netwerk).

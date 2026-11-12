@@ -6,6 +6,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
+import { copyFileSync, renameSync, writeFileSync } from 'node:fs';
 import { openDb, backupTo } from './db.js';
 import { createApi, demoCSVFrom } from './service.js';
 
@@ -48,6 +50,7 @@ export function createServer(db, extraCtx = {}, opts = {}) {
           const chunks = []; let size = 0; for await (const c of req) { size += c.length; if (size > MAX_BODY) return send(413, { error: 'Bestand te groot' }); chunks.push(c); }
           const raw = Buffer.concat(chunks).toString('utf8'); body = raw ? JSON.parse(raw) : {};
         }
+        if (u.pathname === '/api/restore-db' && req.method === 'POST' && opts.restore) { const r = opts.restore(Buffer.from(String(body.base64 || ''), 'base64')); send(200, r); return opts.afterRestore?.(); }
         return send(200, await api(req.method, u.pathname + u.search, body));
       }
       const rel = u.pathname === '/' ? 'index.html' : normalize(u.pathname).replace(/^(\.\.[/\\])+/, '');
@@ -69,6 +72,27 @@ function dailyBackup(db, dbPath) {
   } catch (e) { console.error('Back-up mislukt:', e.message); }
 }
 
+// Herstellen in servermodus: het bestand wordt gecontroleerd en klaargezet; bij de volgende start (de server sluit zichzelf
+// af en Docker/systemd start hem opnieuw) wordt het na een veiligheidskopie in de plaats van de database gezet.
+export function validBackup(path) {
+  let t = null;
+  try { t = new DatabaseSync(path, { readOnly: true }); return t.prepare("SELECT COUNT(*) c FROM sqlite_master WHERE name IN ('transactions','categories')").get().c === 2 && t.prepare('PRAGMA integrity_check').get().integrity_check === 'ok'; }
+  catch { return false; } finally { try { t?.close(); } catch { /* niets */ } }
+}
+export function applyPendingRestore(dbPath) {
+  const pending = dbPath + '.restore';
+  if (!existsSync(pending)) return false;
+  try {
+    if (validBackup(pending)) {
+      if (existsSync(dbPath)) { const bd = join(dirname(dbPath), 'backups'); mkdirSync(bd, { recursive: true }); copyFileSync(dbPath, join(bd, `voor-herstel-${new Date().toISOString().replace(/[:.]/g, '-')}.db`)); }
+      for (const ext of ['-wal', '-shm']) if (existsSync(dbPath + ext)) unlinkSync(dbPath + ext);
+      renameSync(pending, dbPath); return true;
+    }
+  } catch (e) { console.error('Herstellen mislukt:', e.message); }
+  try { unlinkSync(pending); } catch { /* weg */ }
+  return false;
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT) || 3000, host = process.env.HOST || '127.0.0.1', password = process.env.MYBUDGETS_PASSWORD || '';
   const dbPath = process.env.DB_PATH || 'data/budget.db';
@@ -76,9 +100,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.error('Weigert te starten: HOST staat open voor het netwerk maar MYBUDGETS_PASSWORD is niet gezet.\nZet een wachtwoord (aanbevolen) of MYBUDGETS_ALLOW_NO_AUTH=1.'); process.exit(1);
   }
   mkdirSync(dirname(dbPath), { recursive: true });
+  if (applyPendingRestore(dbPath)) console.log('Back-up hersteld.');
   const db = openDb(dbPath);
   if (process.env.MYBUDGETS_BACKUPS !== '0') { dailyBackup(db, dbPath); setInterval(() => dailyBackup(db, dbPath), 6 * 3600e3).unref(); }
-  const srv = createServer(db, {}, { password }).listen(port, host, () => console.log(`MyBudgets op http://${host}:${port}${password ? ' (met wachtwoord)' : ''}  database: ${dbPath}`));
+  const restore = buf => {
+    const pending = dbPath + '.restore'; writeFileSync(pending, buf);
+    if (!validBackup(pending)) { unlinkSync(pending); throw Object.assign(new Error('Dit is geen geldige MyBudgets-back-up.'), { status: 400 }); }
+    return { ok: true, restarting: true };
+  };
+  const srv = createServer(db, {}, { password, restore, afterRestore: () => setTimeout(() => process.exit(0), 300) }).listen(port, host, () => console.log(`MyBudgets op http://${host}:${port}${password ? ' (met wachtwoord)' : ''}  database: ${dbPath}`));
   const stop = () => { srv.close(); try { dailyBackup(db, dbPath); db.close(); } catch { /* al gesloten */ } process.exit(0); };
   process.on('SIGTERM', stop); process.on('SIGINT', stop);
 }
