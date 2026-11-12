@@ -3,9 +3,11 @@
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const eur = c => (c / 100).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
+// Negatieve bedragen als "−€ 12,34" (echt minteken vóór het euroteken) in plaats van "€ -12,34"
+const fmtEur = (c, opts) => (c / 100).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', ...opts });
+const eur = c => (c < 0 ? '−' + fmtEur(-c) : fmtEur(c));
 const num0 = c => (Math.abs(c) < 50 ? 0 : Math.round(c / 100)).toLocaleString('nl-NL');
-const eur0 = c => (Math.abs(c) < 50 ? 0 : c / 100).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+const eur0 = c => (Math.abs(c) < 50 ? fmtEur(0, { maximumFractionDigits: 0 }) : c < 0 ? '−' + fmtEur(-c, { maximumFractionDigits: 0 }) : fmtEur(c, { maximumFractionDigits: 0 }));
 const eurSigned = c => (c > 0 ? '+' : '') + eur(c);
 const monthName = m => new Date(m + '-01T12:00').toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' });
 const monthShort = m => new Date(m + '-01T12:00').toLocaleDateString('nl-NL', { month: 'short' }).replace('.', '');

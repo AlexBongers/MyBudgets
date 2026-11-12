@@ -95,8 +95,15 @@ async function memoryTab() {
   $$('[data-forget]').forEach(b => b.onclick = guard(async () => { await DEL('/memory?key=' + encodeURIComponent(b.dataset.forget)); await refreshMeta(); V.categories(); }));
 }
 
-function howTab() {
-  $('#tabbody').innerHTML = `<div class="card"><h2>Hoe MyBudgets categoriseert</h2>
+async function howTab() {
+  const st = await GET('/stats');
+  const labels = { manual: ['Door jou ingedeeld', 'var(--accent)'], split: ['Gesplitst', 'var(--accent)'], rule: ['Eigen regel', '#8b5cf6'], own: ['Eigen rekening', '#94a3b8'], pair: ['Overboeking gekoppeld', '#94a3b8'], memory: ['Geleerd van jou', '#14b8a6'], builtin: ['Woordenboek', 'var(--good)'], heur: ['Afgeleid', '#84cc16'], ml: ['Leermodel (zeker)', '#f59e0b'], suggested: ['Suggestie, te beoordelen', 'var(--warn)'], none: ['Geen categorie', 'var(--bad)'] };
+  const parts = Object.entries(st.bySource).filter(([k]) => labels[k]).sort((a, b) => b[1] - a[1]);
+  const statsHtml = st.total ? `<div class="card" style="margin-bottom:16px"><h2>Jouw gegevens <span class="right muted">${st.total} transacties · ${st.rules} regels · ${st.memory} onthouden tegenpartijen</span></h2>
+    <div class="bar" style="height:14px;display:flex;border-radius:7px">${parts.map(([k, n]) => `<i title="${labels[k][0]}: ${n}" style="width:${n / st.total * 100}%;background:${labels[k][1]};border-radius:0"></i>`).join('')}</div>
+    <div class="row small" style="margin-top:10px;gap:6px 16px">${parts.map(([k, n]) => `<span><i class="dot" style="background:${labels[k][1]}"></i> ${labels[k][0]} <b>${n}</b> <span class="faint">(${pct(n, st.total)}%)</span></span>`).join('')}</div>
+    <p class="muted small" style="margin-bottom:0">${st.review ? `<b>${st.review}</b> transacties wachten op je beoordeling.` : 'Alles is beoordeeld.'} Hoe meer je indeelt, hoe minder je later hoeft te doen.</p></div>` : '';
+  $('#tabbody').innerHTML = statsHtml + `<div class="card"><h2>Hoe MyBudgets categoriseert</h2>
     <p>Bij elke import loopt een transactie langs onderstaande lagen. De eerste laag die iets herkent wint. Alles met een zekerheid onder 80% belandt in <b>Te beoordelen</b>.</p>
     <ol class="steps">
       <li><b>Jouw regels</b> — expliciete voorwaarden op tegenpartij, omschrijving, IBAN, bedrag en richting. Altijd zekerheid 100%.</li>

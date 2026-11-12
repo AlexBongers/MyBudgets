@@ -453,6 +453,13 @@ export function createApi(db, ctx = {}) {
       recategorize(db);
       return { ok: true, deleted: n };
     },
+    // Hoe is de categorisering tot stand gekomen? (transparantie in "Hoe werkt het?")
+    'GET /api/stats': () => {
+      const bySource = Object.fromEntries(q(`SELECT CASE WHEN confirmed=0 AND category_id IS NOT NULL AND cat_conf < ${AUTO_THRESHOLD - 0.001} THEN 'suggested' ELSE COALESCE(cat_source,'none') END s, COUNT(*) n FROM transactions GROUP BY s`).map(r => [r.s, r.n]));
+      const total = Object.values(bySource).reduce((a, b) => a + b, 0);
+      const review = one(`SELECT COUNT(*) c FROM transactions t WHERE ${REVIEW}`).c;
+      return { total, review, bySource, rules: one('SELECT COUNT(*) c FROM rules WHERE enabled=1').c, memory: one('SELECT COUNT(*) c FROM memory').c };
+    },
     'GET /api/goals': () => q('SELECT * FROM goals ORDER BY id'),
     'POST /api/goals': b => {
       if (!String(b.name || '').trim() || !(Number(b.target) > 0)) throw httpErr(400, 'Naam en streefbedrag zijn verplicht');

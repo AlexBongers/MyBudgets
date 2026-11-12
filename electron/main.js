@@ -9,6 +9,7 @@ import { createApi, demoCSVFrom } from '../src/service.js';
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const isMac = process.platform === 'darwin';
 app.setName('MyBudgets');
+app.setAboutPanelOptions({ applicationName: 'MyBudgets', applicationVersion: app.getVersion(), copyright: 'Lokaal en privé: je gegevens verlaten je Mac nooit.' });
 
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
@@ -154,6 +155,7 @@ app.on('open-file', (e, p) => { e.preventDefault(); if (win?.webContents && !win
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_w, _p, cb) => cb(false));
+  if (isMac && !app.isPackaged) { try { app.dock.setIcon(join(ROOT, 'build/icon.png')); } catch { /* alleen cosmetisch in dev */ } }
   startDb(); autoBackup(); buildMenu(); createWindow();
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
