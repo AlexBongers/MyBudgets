@@ -16,7 +16,12 @@ export function createServer(db) {
     const send = (code, body, type = 'application/json') => { res.writeHead(code, { 'Content-Type': type }); res.end(Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body)); };
     try {
       const u = new URL(req.url, 'http://localhost');
+      // Bescherming tegen DNS-rebinding en CSRF vanuit andere websites: alleen lokale Host-headers, en schrijfacties
+      // moeten application/json zijn (dat dwingt een CORS-preflight af, die we nooit goedkeuren).
+      if (!/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(req.headers.host || '')) return send(403, { error: 'Ongeldige host' });
       if (u.pathname.startsWith('/api/')) {
+        if (req.method !== 'GET' && req.method !== 'DELETE' && !/^application\/json\b/i.test(req.headers['content-type'] || '')) return send(415, { error: 'Content-Type moet application/json zijn' });
+        if (req.method === 'DELETE' && req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) return send(403, { error: 'Ongeldige oorsprong' });
         let body = {};
         if (req.method !== 'GET' && req.method !== 'DELETE') {
           const chunks = []; for await (const c of req) chunks.push(c);
