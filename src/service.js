@@ -56,11 +56,36 @@ export function createApi(db, ctx = {}) {
     const spent = spentByCat(m);
     const avg = Object.fromEntries(q(`SELECT category_id c, -SUM(amount)/3.0 a FROM tl WHERE ym IN (?,?,?) AND category_id IS NOT NULL GROUP BY category_id`,
       addMonths(m, -1), addMonths(m, -2), addMonths(m, -3)).map(r => [r.c, Math.round(r.a)]));
-    return q(`SELECT c.id, c.name, c.color, c.icon, c.grp,
+    const carry = rolloverCarry(m);
+    return q(`SELECT c.id, c.name, c.color, c.icon, c.grp, c.rollover,
         (SELECT amount FROM budgets b WHERE b.category_id=c.id AND b.month<=? ORDER BY month DESC LIMIT 1) AS budget,
         EXISTS(SELECT 1 FROM budgets b WHERE b.category_id=c.id AND b.month=?) AS explicit
       FROM categories c WHERE c.kind='expense' ORDER BY ${GRP_ORDER}, c.grp, c.name`, m, m)
-      .map(r => ({ ...r, budget: r.budget ?? 0, explicit: !!r.explicit, spent: spent[r.id] ?? 0, avg3: Math.max(0, avg[r.id] ?? 0) }));
+      .map(r => {
+        const budget = r.budget ?? 0, c = carry[r.id] ?? 0;
+        // limit = wat deze maand beschikbaar is (budget + overgedragen saldo van eerdere maanden)
+        return { ...r, rollover: !!r.rollover, budget, carry: c, limit: budget + c, explicit: !!r.explicit, spent: spent[r.id] ?? 0, avg3: Math.max(0, avg[r.id] ?? 0) };
+      });
+  }
+  // Overdracht (envelope): per categorie met rollover de som van (budget − besteed) over alle eerdere maanden sinds het eerste budget.
+  function rolloverCarry(m) {
+    const ids = q('SELECT id FROM categories WHERE kind=\'expense\' AND rollover=1').map(r => r.id);
+    const out = {}; if (!ids.length) return out;
+    const ph = ids.map(() => '?').join(',');
+    const budgets = q(`SELECT category_id c, month, amount FROM budgets WHERE category_id IN (${ph}) AND month<? ORDER BY month`, ...ids, m);
+    const spent = q(`SELECT category_id c, ym, -SUM(amount) s FROM tl WHERE category_id IN (${ph}) AND ym<? GROUP BY category_id, ym`, ...ids, m);
+    const sp = new Map(spent.map(r => [r.c + '|' + r.ym, r.s]));
+    for (const id of ids) {
+      const bs = budgets.filter(b => b.c === id); if (!bs.length) continue;
+      let k = bs[0].month, bi = 0, cur = 0, total = 0, guardN = 0;
+      while (k < m && guardN++ < 120) {
+        while (bi < bs.length && bs[bi].month <= k) cur = bs[bi++].amount;
+        total += cur - (sp.get(id + '|' + k) ?? 0);
+        k = addMonths(k, 1);
+      }
+      out[id] = total;
+    }
+    return out;
   }
   function accounts() {
     return q('SELECT * FROM accounts ORDER BY id').map(a => {
@@ -114,8 +139,8 @@ export function createApi(db, ctx = {}) {
     const up = d.byCategory.map(c => ({ ...c, diff: c.value - (c.prev || 0) })).filter(c => c.diff > 2000 && c.prev > 0).sort((a, b) => b.diff - a.diff)[0];
     if (up) out.push({ type: 'info', text: `Grootste stijging: ${up.icon} ${up.name} (+${eur(up.diff)} t.o.v. vorige maand).` });
     for (const b of d.budget) {
-      if (b.budget > 0 && b.spent > b.budget) out.push({ type: 'warn', text: `${b.icon} ${b.name} staat ${eur(b.spent - b.budget)} boven budget.` });
-      else if (b.budget > 0 && b.spent > b.budget * 0.85) out.push({ type: 'info', text: `${b.icon} ${b.name}: ${Math.round(b.spent / b.budget * 100)}% van het budget is besteed.` });
+      if (b.budget > 0 && b.spent > b.limit) out.push({ type: 'warn', text: `${b.icon} ${b.name} staat ${eur(b.spent - b.limit)} boven budget.` });
+      else if (b.budget > 0 && b.limit > 0 && b.spent > b.limit * 0.85) out.push({ type: 'info', text: `${b.icon} ${b.name}: ${Math.round(b.spent / b.limit * 100)}% van het budget is besteed.` });
     }
     if (d.projection) {
       const tb = d.budget.reduce((a, b) => a + b.budget, 0);
@@ -277,8 +302,8 @@ export function createApi(db, ctx = {}) {
       return { id: Number(r.lastInsertRowid) };
     },
     'PUT /api/categories/:id': (b, { id }) => {
-      run('UPDATE categories SET name=COALESCE(?,name), kind=COALESCE(?,kind), color=COALESCE(?,color), icon=COALESCE(?,icon), grp=COALESCE(?,grp) WHERE id=?',
-        b.name?.trim() ?? null, b.kind ?? null, b.color ?? null, b.icon ?? null, b.grp ?? null, id);
+      run('UPDATE categories SET name=COALESCE(?,name), kind=COALESCE(?,kind), color=COALESCE(?,color), icon=COALESCE(?,icon), grp=COALESCE(?,grp), rollover=COALESCE(?,rollover) WHERE id=?',
+        b.name?.trim() ?? null, b.kind ?? null, b.color ?? null, b.icon ?? null, b.grp ?? null, b.rollover == null ? null : (b.rollover ? 1 : 0), id);
       return { ok: true };
     },
     'DELETE /api/categories/:id': (_, { id }) => {

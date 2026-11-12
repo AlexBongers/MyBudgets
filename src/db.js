@@ -49,6 +49,7 @@ function migrate(db) {
   addCol('categories', 'key', 'TEXT');
   addCol('categories', 'icon', "TEXT NOT NULL DEFAULT '🏷️'");
   addCol('categories', 'grp', "TEXT NOT NULL DEFAULT 'Overig'");
+  addCol('categories', 'rollover', 'INTEGER NOT NULL DEFAULT 0');
   addCol('transactions', 'account_id', 'INTEGER REFERENCES accounts(id) ON DELETE SET NULL');
   addCol('transactions', 'code', "TEXT NOT NULL DEFAULT ''");
   addCol('transactions', 'seq', 'INTEGER NOT NULL DEFAULT 0');

@@ -2,29 +2,33 @@
 // ---------- Budget ----------
 V.budget = async () => {
   const [rows, dash] = await Promise.all([GET('/budget?month=' + S.month), GET('/dashboard?month=' + S.month)]);
-  const tb = rows.reduce((a, b) => a + b.budget, 0), ts = rows.reduce((a, b) => a + (b.budget ? b.spent : 0), 0);
-  const unbudgetedSpent = rows.filter(r => !r.budget).reduce((a, b) => a + b.spent, 0);
-  const free = dash.totals.income - tb;
+  // 'limit' = budget + overgedragen saldo (rollover); het maandbudget zelf blijft 'budget'
+  const tb = rows.reduce((a, b) => a + b.limit, 0), ts = rows.reduce((a, b) => a + (b.limit ? b.spent : 0), 0);
+  const carried = rows.reduce((a, b) => a + b.carry, 0), monthlyBudget = rows.reduce((a, b) => a + b.budget, 0);
+  const unbudgetedSpent = rows.filter(r => !r.limit).reduce((a, b) => a + b.spent, 0);
+  const free = dash.totals.income - monthlyBudget;
   const groups = [...new Set(rows.map(r => r.grp))];
   const m = render(`
     <div class="grid g4" style="margin-bottom:16px">
-      <div class="card kpi"><h2>Totaal budget</h2><div class="v">${eur(tb)}</div><div class="sub">per maand</div></div>
+      <div class="card kpi"><h2>Beschikbaar</h2><div class="v">${eur(tb)}</div><div class="sub">${Math.abs(carried) >= 50 ? `${eur0(monthlyBudget)} budget ${carried > 0 ? '+' : '−'} ${eur0(Math.abs(carried))} overgedragen` : 'per maand'}</div></div>
       <div class="card kpi"><h2>Besteed (met budget)</h2><div class="v">${eur(ts)}</div><div class="sub">${tb ? pct(ts, tb) + '% van budget' : '–'}</div></div>
       <div class="card kpi"><h2>Resterend</h2><div class="v ${tb - ts < 0 ? 'neg' : 'pos'}">${eur(tb - ts)}</div><div class="sub">${unbudgetedSpent > 0 ? `+ ${eur0(unbudgetedSpent)} zonder budget` : 'alles gebudgetteerd'}</div></div>
       <div class="card kpi"><h2>Nog te verdelen</h2><div class="v ${free < 0 ? 'neg' : ''}">${dash.totals.income ? eur(free) : '–'}</div><div class="sub">inkomen minus budget</div></div>
     </div>
     <div class="row" style="margin-bottom:12px"><button class="btn" id="fill" title="Vul lege categorieën met het gemiddelde van de laatste 3 maanden">✨ Vul aan met gemiddelde</button><button class="btn" id="copy">Kopieer vorige maand</button>
       <span class="muted small">Een budget geldt vanaf de gekozen maand tot je het wijzigt.</span></div>
-    <div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th>Categorie</th><th style="width:24%">Voortgang</th><th class="num">Budget (€)</th><th class="num">Gem. 3 mnd</th><th class="num">Besteed</th><th class="num">Resterend</th></tr></thead><tbody>
+    <div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th>Categorie</th><th style="width:24%">Voortgang</th><th class="num">Budget (€)</th><th class="num">Gem. 3 mnd</th><th class="num">Besteed</th><th class="num">Beschikbaar</th></tr></thead><tbody>
       ${groups.map(g => { const list = rows.filter(r => r.grp === g); return `<tr class="grp"><td colspan="6" style="background:var(--hover);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">${esc(g)} <span style="float:right">${eur0(list.reduce((a, b) => a + b.spent, 0))} / ${eur0(list.reduce((a, b) => a + b.budget, 0))}</span></td></tr>` +
-        list.map(r => { const left = r.budget - r.spent; return `<tr><td><i class="dot" style="background:${r.color}"></i> <a href="#" data-opencat="${r.id}" style="color:inherit;text-decoration:none">${r.icon} ${esc(r.name)}</a></td><td>${progressBar(r.spent, r.budget)}</td>
+        list.map(r => { const left = r.limit - r.spent; return `<tr><td><i class="dot" style="background:${r.color}"></i> <a href="#" data-opencat="${r.id}" style="color:inherit;text-decoration:none">${r.icon} ${esc(r.name)}</a>
+          <label class="small muted" style="margin-left:6px;white-space:nowrap" title="Niet-bestede ruimte schuift door naar de volgende maand"><input type="checkbox" data-roll="${r.id}" ${r.rollover ? 'checked' : ''}>${r.rollover ? ' overdragen' : ''}</label>${r.rollover && Math.abs(r.carry) >= 50 ? `<div class="small ${r.carry < 0 ? 'neg' : 'pos'}" style="margin-left:15px">${r.carry > 0 ? '+' : '−'}${eur0(Math.abs(r.carry))} overgedragen</div>` : ''}</td><td>${progressBar(r.spent, r.limit)}</td>
         <td class="num"><input type="number" min="0" step="5" value="${r.budget ? r.budget / 100 : ''}" placeholder="0" data-cat="${r.id}" style="width:84px;text-align:right"></td>
         <td class="num">${r.avg3 ? `<a href="#" class="muted" data-avg="${r.id}:${Math.round(r.avg3 / 500) * 5}" title="Gebruik gemiddelde als budget">${eur0(r.avg3)}</a>` : '<span class="faint">–</span>'}</td>
-        <td class="num">${r.spent ? eur(r.spent) : '<span class="faint">–</span>'}</td><td class="num ${r.budget ? (left < 0 ? 'neg' : 'pos') : 'faint'}">${r.budget ? eur(left) : '–'}</td></tr>`; }).join(''); }).join('')}
+        <td class="num">${r.spent ? eur(r.spent) : '<span class="faint">–</span>'}</td><td class="num ${r.limit ? (left < 0 ? 'neg' : 'pos') : 'faint'}">${r.limit ? eur(left) : '–'}</td></tr>`; }).join(''); }).join('')}
     </tbody></table></div></div>`);
   const save = guard(async (cat, euros) => { const top = $('#main').scrollTop; await PUT('/budget', { category_id: cat, month: S.month, amount: Math.round(Number(euros) * 100) }); await V.budget(); $('#main').scrollTop = top; });
   m.querySelectorAll('[data-opencat]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); openCategory(+a.dataset.opencat); }));
   m.querySelectorAll('input[data-cat]').forEach(i => i.addEventListener('change', () => save(+i.dataset.cat, i.value || 0)));
+  m.querySelectorAll('input[data-roll]').forEach(i => i.addEventListener('change', guard(async () => { const top = $('#main').scrollTop; await PUT('/categories/' + i.dataset.roll, { rollover: i.checked }); await refreshMeta(); await V.budget(); $('#main').scrollTop = top; })));
   m.querySelectorAll('[data-avg]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const [c, v] = a.dataset.avg.split(':'); save(+c, v); }));
   $('#fill').onclick = guard(async () => { const r = await POST('/budget/fill', { month: S.month }); toast(r.filled ? `${r.filled} budgetten ingevuld` : 'Niets om aan te vullen'); V.budget(); });
   $('#copy').onclick = guard(async () => { const r = await POST('/budget/copy', { from: shiftMonth(S.month, -1), to: S.month }); toast(`${r.copied} budgetten gekopieerd`); V.budget(); });

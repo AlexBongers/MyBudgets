@@ -261,3 +261,21 @@ test('importgeschiedenis: elke import is terug te draaien', async () => {
   assert.equal(db.prepare('SELECT COUNT(*) c FROM transactions').get().c, 1);
   assert.ok(a.importId);
 });
+
+test('budget-overdracht (rollover): niet-bestede ruimte schuift door, overschrijding verkleint de volgende maand', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:'); const api = createApi(db);
+  const hdr = '"IBAN/BBAN","Munt","Volgnr","Datum","Bedrag","Naam tegenpartij","Omschrijving-1"';
+  const rows = ['"NL01RABO0000000001","EUR","1","2026-01-10","-60,00","Jumbo","x"', '"NL01RABO0000000001","EUR","2","2026-02-10","-130,00","Jumbo","x"', '"NL01RABO0000000001","EUR","3","2026-03-10","-10,00","Jumbo","x"'];
+  importTransactions(db, parseRabobank([hdr, ...rows].join('\n')));
+  const g = id('groceries');
+  await api('PUT', '/api/budget', { category_id: g, month: '2026-01', amount: 10000 });
+  const at = async m => (await api('GET', '/api/budget?month=' + m)).find(r => r.id === g);
+  assert.equal((await at('2026-03')).carry, 0); // rollover staat uit
+  await api('PUT', '/api/categories/' + g, { rollover: true });
+  assert.equal((await at('2026-01')).carry, 0);
+  assert.equal((await at('2026-02')).carry, 4000);              // 100 - 60 overgedragen
+  assert.equal((await at('2026-02')).limit, 14000);
+  assert.equal((await at('2026-03')).carry, 4000 + (10000 - 13000)); // februari 30 te veel: 40 - 30 = 10 over
+  assert.equal((await at('2026-03')).limit, 10000 + 1000);
+});
