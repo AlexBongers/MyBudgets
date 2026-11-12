@@ -114,14 +114,15 @@ V.review = async () => {
 V.transactions = async () => {
   const f = S.txFilter = Object.assign({ sort: 'date', dir: 'desc' }, S.txFilter);
   const selected = new Set(); let loaded = 0, total = 0;
-  const showAll = f.all || f.merchant || f.status || f.q;
+  const showAll = f.all || f.merchant || f.status || f.q || f.from || f.to;
   const m = render(`
     <div class="filters">
-      <input type="search" id="q" placeholder="Zoek op naam, omschrijving, IBAN…" value="${esc(f.q || '')}">
+      <input type="search" id="q" aria-label="Zoeken in transacties" placeholder="Zoek op naam, omschrijving, IBAN…  ( / )" value="${esc(f.q || '')}">
       ${catSelect(f.category === 'none' ? '' : Number(f.category) || null, { none: 'Alle categorieën', attrs: 'id="fcat"' }).replace('</optgroup></select>', '</optgroup><option value="none" ' + (f.category === 'none' ? 'selected' : '') + '>❔ Zonder categorie</option></select>')}
       ${S.accounts.length > 1 ? `<select id="facc"><option value="">Alle rekeningen</option>${S.accounts.map(a => `<option value="${a.id}" ${String(f.account) === String(a.id) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>` : ''}
       <div class="seg" id="ftype">${[['', 'Alles'], ['out', 'Uit'], ['in', 'In']].map(([v, l]) => `<button data-v="${v}" class="${(f.type || '') === v ? 'on' : ''}">${l}</button>`).join('')}</div>
       <div class="seg" id="fscope"><button data-v="month" class="${!showAll ? 'on' : ''}">${esc(monthName(S.month || ''))}</button><button data-v="all" class="${showAll ? 'on' : ''}">Alle maanden</button></div>
+      <span class="row small muted" style="gap:4px"><input type="date" id="dfrom" aria-label="Vanaf datum" value="${esc(f.from || '')}"> – <input type="date" id="dto" aria-label="Tot en met datum" value="${esc(f.to || '')}">${f.from || f.to ? ' <a href="#" id="clrd">✕</a>' : ''}</span>
       <label class="row small"><input type="checkbox" id="frev" ${f.status === 'review' ? 'checked' : ''}> Alleen te beoordelen</label>
       ${f.merchant ? `<span class="chip" style="--c:#0a84ff">Tegenpartij: ${esc(f.merchant)} <a href="#" id="clrm">✕</a></span>` : ''}
     </div>
@@ -133,15 +134,15 @@ V.transactions = async () => {
   const query = off => {
     const p = new URLSearchParams({ sort: f.sort, dir: f.dir, offset: off, limit: 300 });
     if (!showAll) p.set('month', S.month); if (f.month && !f.all) p.set('month', f.month);
-    for (const k of ['q', 'category', 'account', 'type', 'status', 'merchant']) if (f[k]) p.set(k, f[k]);
+    for (const k of ['q', 'category', 'account', 'type', 'status', 'merchant', 'from', 'to']) if (f[k]) p.set(k, f[k]);
     return p.toString();
   };
   const rowHtml = t => {
     const c = catById(t.category_id), weak = !t.confirmed && (!t.category_id || t.cat_conf < 0.8);
     const tag = t.confirmed || t.cat_source === 'manual' ? '' : weak ? `<span class="tag warn" title="${esc(t.cat_reason)}">controleer</span>` : t.cat_source ? `<span class="tag" title="${esc(t.cat_reason)}">${SRC[t.cat_source] || 'auto'}</span>` : '';
-    return `<tr data-id="${t.id}"><td><input type="checkbox" class="sel" ${selected.has(t.id) ? 'checked' : ''}></td><td class="nowrap">${fmtDay(t.date)}</td>
+    return `<tr data-id="${t.id}"><td><input type="checkbox" class="sel" aria-label="Selecteer ${esc(t.payee)}" ${selected.has(t.id) ? 'checked' : ''}></td><td class="nowrap">${fmtDay(t.date)}</td>
       <td><div class="tx-name"><a href="#" class="open" style="color:inherit;text-decoration:none">${esc(t.payee)}</a>${t.notes ? ' 📝' : ''}</div><div class="small muted" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description)}</div></td>
-      <td>${t.split_count ? `<button class="btn sm open-split" title="Splitsing bekijken of wijzigen">✂️ Gesplitst · ${t.split_count} delen</button>` : `<div class="row" style="flex-wrap:nowrap">${catSelect(t.category_id, { none: '❔ kies…', cls: 'cat-input rowcat' })}${tag}</div>`}</td>
+      <td>${t.split_count ? `<button class="btn sm open-split" title="Splitsing bekijken of wijzigen">✂️ Gesplitst · ${t.split_count} delen</button>` : `<div class="row" style="flex-wrap:nowrap">${catSelect(t.category_id, { none: '❔ kies…', cls: 'cat-input rowcat', attrs: `aria-label="Categorie voor ${esc(t.payee)}"` })}${tag}</div>`}</td>
       <td class="num ${t.amount < 0 ? '' : 'pos'}"><b>${eur(t.amount)}</b></td></tr>`;
   };
   const load = guard(async (append) => {
@@ -172,6 +173,10 @@ V.transactions = async () => {
   $('#fscope').addEventListener('click', e => { if (e.target.dataset.v) { f.all = e.target.dataset.v === 'all'; if (!f.all) { delete f.merchant; delete f.month; } V.transactions(); } });
   $('#frev').addEventListener('change', e => { set('status', e.target.checked ? 'review' : ''); V.transactions(); });
   $('#clrm')?.addEventListener('click', e => { e.preventDefault(); delete f.merchant; V.transactions(); });
+  $('#dfrom').addEventListener('change', e => { set('from', e.target.value); V.transactions(); });
+  $('#dto').addEventListener('change', e => { set('to', e.target.value); V.transactions(); });
+  $('#clrd')?.addEventListener('click', e => { e.preventDefault(); delete f.from; delete f.to; V.transactions(); });
+  setKeyHandler(e => { if (e.key === '/' && !e.target.matches('input,textarea,select') && !document.querySelector('.overlay')) { e.preventDefault(); $('#q').focus(); } });
   $('#more').addEventListener('click', () => load(true));
   $$('th.sortable').forEach(th => th.addEventListener('click', () => { f.dir = f.sort === th.dataset.sort && f.dir === 'desc' ? 'asc' : 'desc'; f.sort = th.dataset.sort; V.transactions(); }));
   $('#selall').addEventListener('change', e => { $$('tr[data-id]').forEach(tr => { const id = +tr.dataset.id; tr.querySelector('.sel').checked = e.target.checked; e.target.checked ? selected.add(id) : selected.delete(id); }); bulk(); });

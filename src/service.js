@@ -214,6 +214,8 @@ export function createApi(db, ctx = {}) {
     else if (p.get('category')) { where.push('(t.category_id=? OR EXISTS (SELECT 1 FROM splits s WHERE s.tx_id=t.id AND s.category_id=?))'); args.push(Number(p.get('category')), Number(p.get('category'))); }
     if (p.get('account')) { where.push('t.account_id=?'); args.push(Number(p.get('account'))); }
     if (p.get('merchant')) { where.push('t.merchant=?'); args.push(p.get('merchant')); }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(p.get('from') || '')) { where.push('t.date>=?'); args.push(p.get('from')); }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(p.get('to') || '')) { where.push('t.date<=?'); args.push(p.get('to')); }
     if (p.get('type') === 'in') where.push('t.amount>0'); if (p.get('type') === 'out') where.push('t.amount<0');
     if (p.get('q')) { const like = `%${p.get('q')}%`; where.push('(t.payee LIKE ? OR t.description LIKE ? OR t.notes LIKE ? OR t.counter_iban LIKE ?)'); args.push(like, like, like, like); }
     const W = where.length ? 'WHERE ' + where.join(' AND ') : '';
