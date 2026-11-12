@@ -171,7 +171,7 @@ V.settings = async () => {
     <div class="card"><h2>Rekeningen</h2>${accs.length ? accs.map(a => `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)" data-id="${a.id}"><div><input data-name value="${esc(a.name)}" style="width:190px"><div class="small muted" style="margin-top:3px">${esc(a.iban)} · ${a.count} transacties${a.from ? ` · ${fmtDate(a.from)} – ${fmtDate(a.to)}` : ''}</div></div><b>${a.balance != null ? eur(a.balance) : ''}</b></div>`).join('') : '<div class="empty">Nog geen rekeningen. Ze verschijnen na je eerste import.</div>'}</div>
     <div class="card"><h2>Gegevens</h2><div class="stack">
       <div class="row"><button class="btn" id="exp">Transacties exporteren (CSV)…</button></div>
-      ${window.native ? `<div class="row"><button class="btn" id="bk">Back-up maken…</button><button class="btn" id="rs">Back-up herstellen…</button><button class="btn" id="rv">Toon in Finder</button></div>` : '<div class="row"><a class="btn" href="/api/backup" download>Back-up downloaden (.db)</a></div>'}
+      ${window.native ? `<div class="row"><button class="btn" id="bk">Back-up maken…</button><button class="btn" id="rs">Back-up herstellen…</button><button class="btn" id="rv">Toon in Finder</button></div>` : '<div class="row"><a class="btn" href="/api/backup" download>Back-up downloaden (.db)</a><button class="btn" id="rsweb">Back-up herstellen…</button></div>'}
       <p class="muted small" style="margin:0">Je gegevens staan lokaal in één databasebestand. Maak regelmatig een back-up (bijv. naar iCloud Drive of Time Machine).</p><hr>
       <div class="row"><button class="btn" id="demo">Voorbeelddata laden</button><button class="btn danger" id="wipe">Alles wissen…</button></div></div></div>
     ${backups.length ? `<div class="card" style="grid-column:1/-1"><h2>Automatische back-ups <span class="right"><a href="#" id="bkreveal">Toon map</a></span></h2>
@@ -190,6 +190,15 @@ V.settings = async () => {
   m.querySelectorAll('[data-name]').forEach(i => i.addEventListener('change', guard(async () => { await PUT('/accounts/' + i.closest('[data-id]').dataset.id, { name: i.value }); await refreshMeta(); toast('Opgeslagen'); })));
   $('#exp').onclick = guard(exportCSV);
   $('#bk')?.addEventListener('click', guard(async () => { if (await window.native.backup()) toast('Back-up gemaakt'); }));
+  $('#rsweb')?.addEventListener('click', () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.db,application/octet-stream';
+    inp.onchange = guard(async () => {
+      const f = inp.files[0]; if (!f) return;
+      if (!confirm('Alle huidige gegevens worden vervangen door deze back-up (er wordt eerst een veiligheidskopie bewaard). De server start daarna even opnieuw. Doorgaan?')) return;
+      await POST('/restore-db', { base64: await readFileBase64(f) });
+      toast('Hersteld — de server start opnieuw…'); setTimeout(() => location.reload(), 4000);
+    }); inp.click();
+  });
   $('#rs')?.addEventListener('click', guard(() => window.native.restore()));
   $('#rv')?.addEventListener('click', () => window.native.reveal());
   $('#demo').onclick = guard(async () => { if (await ask('Voorbeelddata laden?', 'Er worden ~600 fictieve transacties toegevoegd aan je bestaande gegevens. Handig om de app te verkennen.', 'Laden')) { const r = await POST('/demo'); await refreshMeta(); S.month = null; toast(`${r.added} voorbeeldtransacties geladen`); } });

@@ -40,3 +40,16 @@ test('servermodus met wachtwoord: 401 zonder/met fout wachtwoord, werkt vanaf el
     assert.equal((await post('text/plain')).status, 415);                                                  // CSRF-bescherming blijft
   } finally { srv.close(); }
 });
+
+test('servermodus: herstel van back-up wordt gevalideerd en bij start toegepast', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync, existsSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+  const { validBackup, applyPendingRestore } = await import('../src/server.js'); const { backupTo } = await import('../src/db.js');
+  const dir = mkdtempSync(join(tmpdir(), 'mb-rs-')), live = join(dir, 'budget.db'), good = join(dir, 'good.db');
+  const a = openDb(live); a.prepare("INSERT INTO accounts(name, iban) VALUES ('OUD', 'NL1')").run(); a.close();
+  const b = openDb(':memory:'); b.prepare("INSERT INTO accounts(name, iban) VALUES ('NIEUW', 'NL2')").run(); backupTo(b, good);
+  writeFileSync(join(dir, 'rommel.db'), 'geen database'); assert.equal(validBackup(join(dir, 'rommel.db')), false); assert.equal(validBackup(good), true);
+  writeFileSync(live + '.restore', 'kapot'); assert.equal(applyPendingRestore(live), false); assert.ok(!existsSync(live + '.restore'));   // ongeldig: genegeerd
+  writeFileSync(live + '.restore', readFileSync(good)); assert.equal(applyPendingRestore(live), true);
+  const c = openDb(live); assert.equal(c.prepare('SELECT name FROM accounts').get().name, 'NIEUW'); c.close();
+  assert.ok(existsSync(join(dir, 'backups')));                                                                                         // veiligheidskopie van de oude gegevens
+});
