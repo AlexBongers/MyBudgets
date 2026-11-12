@@ -62,3 +62,19 @@ function progressBar(spent, budget) {
   const col = !budget ? 'var(--faint)' : spent > budget ? 'var(--bad)' : spent > budget * .85 ? 'var(--warn)' : 'var(--good)';
   return `<div class="bar"><i style="width:${p}%;background:${col}"></i></div>`;
 }
+
+// Staafdiagram met één reeks (bijv. uitgaven per maand voor één categorie). Klikbaar via data-month.
+function monthBars(monthly, color = 'var(--accent)') {
+  const W = 680, H = 200, pad = { l: 42, r: 6, t: 10, b: 24 };
+  const max = niceMax(Math.max(1, ...monthly.map(m => Math.abs(m.value))));
+  const bw = (W - pad.l - pad.r) / monthly.length, y = v => pad.t + (H - pad.t - pad.b) * (1 - v / max);
+  const avg = monthly.reduce((a, m) => a + m.value, 0) / monthly.length;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">`;
+  for (let i = 0; i <= 4; i++) { const v = max * i / 4; s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${axisEur(v)}</text>`; }
+  monthly.forEach((m, i) => {
+    const x = pad.l + i * bw, h = Math.max(0, y(0) - y(Math.max(0, m.value)));
+    s += `<g data-month="${m.month}"><rect x="${x}" y="${pad.t}" width="${bw}" height="${H - pad.t - pad.b}" fill="transparent"/><rect x="${x + bw * 0.15}" y="${y(Math.max(0, m.value))}" width="${bw * 0.7}" height="${h}" fill="${color}" rx="4"><title>${monthName(m.month)}: ${eur(m.value)}</title></rect></g><text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle">${monthShort(m.month)}</text>`;
+  });
+  if (avg > 0) s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(avg)}" y2="${y(avg)}" stroke="var(--warn)" stroke-dasharray="5 4"/><text x="${W - pad.r}" y="${y(avg) - 4}" text-anchor="end" style="fill:var(--warn)">gem. ${eur0(avg)}</text>`;
+  return s + '</svg>';
+}

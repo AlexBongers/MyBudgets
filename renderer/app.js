@@ -4,7 +4,7 @@ const TABS = [
   ['dashboard', 'Dashboard'], ['review', 'Te beoordelen'], ['transactions', 'Transacties'], ['budget', 'Budget'],
   ['recurring', 'Vaste lasten'], ['reports', 'Rapporten'], ['categories', 'Categorieën & regels'],
 ];
-const TITLES = Object.fromEntries([...TABS, ['import', 'Importeren'], ['settings', 'Instellingen']]);
+const TITLES = Object.fromEntries([...TABS, ['import', 'Importeren'], ['settings', 'Instellingen'], ['detail', 'Overzicht']]);
 const NOMONTH = ['categories', 'import', 'settings', 'recurring', 'review'];
 
 function updateNav() {
@@ -24,6 +24,7 @@ async function refreshMeta() {
   updateNav();
 }
 async function go(tab) {
+  if (tab === 'detail' && S.tab !== 'detail') S.backTab = S.tab;
   S.tab = tab; document.title = 'MyBudgets';
   $('#title').textContent = TITLES[tab];
   $('#monthpick').style.display = NOMONTH.includes(tab) ? 'none' : '';
@@ -47,6 +48,7 @@ $('#importbtn').onclick = () => go('import');
 if (!window.native) document.addEventListener('keydown', e => {
   if (!(e.metaKey || e.ctrlKey) || e.target.matches('input,textarea,select')) return;
   const n = Number(e.key); if (n >= 1 && n <= 7) { e.preventDefault(); S.txFilter = {}; go(TABS[n - 1][0]); }
+  if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
   if (e.key === '[') stepMonth(-1); if (e.key === ']') stepMonth(1);
 });
 if (window.native) {
@@ -59,6 +61,7 @@ if (window.native) {
     else if (m.action === 'export') exportCSV();
     else if (m.action === 'backup') { if (await window.native.backup()) toast('Back-up gemaakt'); }
     else if (m.action === 'restore') window.native.restore();
+    else if (m.action === 'undo') { if (document.activeElement?.matches('input,textarea')) document.execCommand('undo'); else doUndo(); }
     else if (m.action === 'search') { S.txFilter = { focusSearch: true }; go('transactions'); }
   }));
 }

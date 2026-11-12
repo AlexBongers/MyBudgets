@@ -25,8 +25,21 @@ async function api(method, path, body) {
 }
 const GET = p => api('GET', p), POST = (p, b) => api('POST', p, b), PUT = (p, b) => api('PUT', p, b), PATCH = (p, b) => api('PATCH', p, b), DEL = p => api('DELETE', p);
 
-let toastT;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200); }
+let toastT, lastUndo = null;
+function toast(msg, undoId) {
+  const t = $('#toast'); t.textContent = msg;
+  if (undoId) {
+    lastUndo = undoId;
+    const b = document.createElement('button'); b.textContent = 'Ongedaan maken'; b.className = 'toast-btn'; b.onclick = () => doUndo();
+    t.append(b);
+  }
+  t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), undoId ? 7000 : 3200);
+}
+async function doUndo() {
+  if (!lastUndo) return toast('Niets om ongedaan te maken');
+  const id = lastUndo; lastUndo = null;
+  try { await POST('/undo', { id }); await refreshMeta(); toast('Ongedaan gemaakt'); go(S.tab); } catch (e) { toast('⚠ ' + e.message); }
+}
 const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { console.error(e); toast('⚠ ' + (e.message || 'Er ging iets mis')); } };
 
 function catChip(c, extra = '') {

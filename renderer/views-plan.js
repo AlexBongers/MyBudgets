@@ -17,12 +17,13 @@ V.budget = async () => {
       <span class="muted small">Een budget geldt vanaf de gekozen maand tot je het wijzigt.</span></div>
     <div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th>Categorie</th><th style="width:24%">Voortgang</th><th class="num">Budget (€)</th><th class="num">Gem. 3 mnd</th><th class="num">Besteed</th><th class="num">Resterend</th></tr></thead><tbody>
       ${groups.map(g => { const list = rows.filter(r => r.grp === g); return `<tr class="grp"><td colspan="6" style="background:var(--hover);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">${esc(g)} <span style="float:right">${eur0(list.reduce((a, b) => a + b.spent, 0))} / ${eur0(list.reduce((a, b) => a + b.budget, 0))}</span></td></tr>` +
-        list.map(r => { const left = r.budget - r.spent; return `<tr><td><i class="dot" style="background:${r.color}"></i> ${r.icon} ${esc(r.name)}</td><td>${progressBar(r.spent, r.budget)}</td>
+        list.map(r => { const left = r.budget - r.spent; return `<tr><td><i class="dot" style="background:${r.color}"></i> <a href="#" data-opencat="${r.id}" style="color:inherit;text-decoration:none">${r.icon} ${esc(r.name)}</a></td><td>${progressBar(r.spent, r.budget)}</td>
         <td class="num"><input type="number" min="0" step="5" value="${r.budget ? r.budget / 100 : ''}" placeholder="0" data-cat="${r.id}" style="width:84px;text-align:right"></td>
         <td class="num">${r.avg3 ? `<a href="#" class="muted" data-avg="${r.id}:${Math.round(r.avg3 / 500) * 5}" title="Gebruik gemiddelde als budget">${eur0(r.avg3)}</a>` : '<span class="faint">–</span>'}</td>
         <td class="num">${r.spent ? eur(r.spent) : '<span class="faint">–</span>'}</td><td class="num ${r.budget ? (left < 0 ? 'neg' : 'pos') : 'faint'}">${r.budget ? eur(left) : '–'}</td></tr>`; }).join(''); }).join('')}
     </tbody></table></div></div>`);
   const save = guard(async (cat, euros) => { const top = $('#main').scrollTop; await PUT('/budget', { category_id: cat, month: S.month, amount: Math.round(Number(euros) * 100) }); await V.budget(); $('#main').scrollTop = top; });
+  m.querySelectorAll('[data-opencat]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); openCategory(+a.dataset.opencat); }));
   m.querySelectorAll('input[data-cat]').forEach(i => i.addEventListener('change', () => save(+i.dataset.cat, i.value || 0)));
   m.querySelectorAll('[data-avg]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const [c, v] = a.dataset.avg.split(':'); save(+c, v); }));
   $('#fill').onclick = guard(async () => { const r = await POST('/budget/fill', { month: S.month }); toast(r.filled ? `${r.filled} budgetten ingevuld` : 'Niets om aan te vullen'); V.budget(); });
@@ -48,7 +49,7 @@ V.recurring = async () => {
     ${old.length ? `<h3 class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.05em">Niet meer actief</h3><div class="card" style="padding:0"><div class="tablewrap">${tbl(old, true)}</div></div>` : ''}
     <p class="muted small">Terugkerende betalingen worden automatisch herkend op basis van regelmaat in datum en bedrag. Supermarkten, horeca en tanken tellen niet mee.</p>`
     : `<div class="empty">Nog geen terugkerende betalingen herkend. Importeer minimaal 3 maanden aan transacties.</div>`);
-  m.querySelectorAll('tr[data-m]').forEach(tr => tr.addEventListener('click', () => { S.txFilter = { merchant: tr.dataset.m, all: true }; go('transactions'); }));
+  m.querySelectorAll('tr[data-m]').forEach(tr => tr.addEventListener('click', () => openMerchant(tr.dataset.m)));
 };
 
 // ---------- Rapporten ----------
@@ -59,7 +60,7 @@ V.reports = async () => {
   const sum = a => a.reduce((x, y) => x + y, 0);
   const cellStyle = (v, max, good) => v ? `background:color-mix(in srgb,${good ? 'var(--good)' : 'var(--bad)'} ${Math.round(Math.min(1, Math.abs(v) / (max || 1)) * 34)}%,transparent)` : '';
   const line = (x, good) => { const mx = Math.max(...x.values.map(Math.abs), 1);
-    return `<tr><td class="nowrap">${x.icon} ${esc(x.name)}</td>${x.values.map((v, i) => `<td class="num cell" data-cat="${x.id}" data-month="${r.months[i]}" style="${cellStyle(v, mx, good)}">${v ? num0(v) : '<span class="faint">·</span>'}</td>`).join('')}<td class="num muted">${num0(Math.round(sum(x.values) / n))}</td><td class="num"><b>${num0(sum(x.values))}</b></td></tr>`; };
+    return `<tr><td class="nowrap"><a href="#" data-opencat="${x.id}" style="color:inherit;text-decoration:none">${x.icon} ${esc(x.name)}</a></td>${x.values.map((v, i) => `<td class="num cell" data-cat="${x.id}" data-month="${r.months[i]}" style="${cellStyle(v, mx, good)}">${v ? num0(v) : '<span class="faint">·</span>'}</td>`).join('')}<td class="num muted">${num0(Math.round(sum(x.values) / n))}</td><td class="num"><b>${num0(sum(x.values))}</b></td></tr>`; };
   const groups = [...new Set(exp.map(x => x.grp))];
   const incT = r.totals.map(t => t.income), expT = r.totals.map(t => t.expenses);
   const m = render(`<div class="row between" style="margin-bottom:14px"><span class="muted">Bedragen in euro's, per categorie per maand. Klik op een cel voor de transacties.</span>
@@ -73,5 +74,6 @@ V.reports = async () => {
     <tr class="total"><td style="border-top:0">Netto</td>${incT.map((v, i) => `<td class="num ${v - expT[i] < 0 ? 'neg' : 'pos'}" style="border-top:0">${num0(v - expT[i])}</td>`).join('')}<td class="num muted" style="border-top:0">${num0(Math.round((sum(incT) - sum(expT)) / n))}</td><td class="num ${sum(incT) - sum(expT) < 0 ? 'neg' : 'pos'}" style="border-top:0">${num0(sum(incT) - sum(expT))}</td></tr>
     </tbody></table></div></div>`);
   $('#rm').addEventListener('click', e => { if (e.target.dataset.v) { S.reportMonths = +e.target.dataset.v; V.reports(); } });
+  m.querySelectorAll('[data-opencat]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); openCategory(+a.dataset.opencat); }));
   m.querySelectorAll('td.cell').forEach(td => td.addEventListener('click', () => { S.txFilter = { category: td.dataset.cat, month: td.dataset.month }; S.month = td.dataset.month; go('transactions'); }));
 };

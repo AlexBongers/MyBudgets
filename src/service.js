@@ -2,7 +2,7 @@
 // Electron (via IPC) als door de ontwikkel-HTTP-server gebruikt.
 import { readFileSync } from 'node:fs';
 import {
-  AUTO_THRESHOLD, importTransactions, recategorize, setCategory, confirmSuggestions, resetAll, loadCategorizer,
+  AUTO_THRESHOLD, importTransactions, recategorize, setCategory, confirmSuggestions, resetAll, loadCategorizer, snapshot, restore,
 } from './db.js';
 import { parseRabobankCsv } from './rabobank.js';
 import { detectRecurring } from './recurring.js';
@@ -23,6 +23,13 @@ export function createApi(db, ctx = {}) {
   const one = (sql, ...p) => db.prepare(sql).get(...p);
   const run = (sql, ...p) => db.prepare(sql).run(...p);
   const latestMonth = () => one('SELECT MAX(substr(date,1,7)) m FROM transactions').m || new Date().toISOString().slice(0, 7);
+  // Laatste 30 wijzigingen kunnen ongedaan worden gemaakt (in het geheugen, per sessie)
+  const undoStack = new Map(); let undoSeq = 0;
+  const withUndo = (ids, fn) => {
+    const snap = snapshot(db, ids), res = fn();
+    const id = ++undoSeq; undoStack.set(id, snap); if (undoStack.size > 30) undoStack.delete(undoStack.keys().next().value);
+    return { ...res, undo: id };
+  };
   const needCat = id => { if (!one('SELECT 1 FROM categories WHERE id=?', id)) throw httpErr(400, 'Onbekende categorie'); };
 
   function monthTotals(m) {
@@ -92,7 +99,7 @@ export function createApi(db, ctx = {}) {
       FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY c.id HAVING value > 0 ORDER BY value DESC`, m)
       .map(c => ({ ...c, prev: prevSpent[c.id] ?? 0 }));
     const trend = []; for (let i = 11; i >= 0; i--) { const mm = addMonths(m, -i); trend.push({ month: mm, ...monthTotals(mm) }); }
-    const topPayees = q(`SELECT t.payee, MAX(COALESCE(c.icon,'❔')) icon, -SUM(t.amount) value, COUNT(*) n
+    const topPayees = q(`SELECT MAX(t.payee) payee, t.merchant, MAX(COALESCE(c.icon,'❔')) icon, -SUM(t.amount) value, COUNT(*) n
       FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY t.merchant HAVING value > 0 ORDER BY value DESC LIMIT 8`, m);
     const budget = budgetRows(m).filter(b => b.budget > 0 || b.spent > 0);
     // cumulatieve uitgaven per dag (deze + vorige maand)
@@ -179,7 +186,37 @@ export function createApi(db, ctx = {}) {
     return { months: list, rows, uncategorized: list.map(mo => -(unc.find(u => u.mo === mo)?.v ?? 0)), totals: list.map(mo => monthTotals(mo)) };
   }
 
+  function detail(u) {
+    const p = u.searchParams; let m = p.get('month'); if (!monthRe.test(m || '')) m = latestMonth();
+    const n = Math.min(24, Number(p.get('months')) || 12), list = []; for (let i = n - 1; i >= 0; i--) list.push(addMonths(m, -i));
+    const from = list[0] + '-01', to = list[n - 1] + '-31';
+    let where, args, head, kind = 'expense';
+    if (p.get('category')) {
+      const c = one('SELECT * FROM categories WHERE id=?', Number(p.get('category')));
+      if (!c) throw httpErr(404, 'Categorie niet gevonden');
+      where = 't.category_id=?'; args = [c.id]; kind = c.kind; head = { type: 'category', id: c.id, title: c.name, icon: c.icon, color: c.color, group: c.grp, kind: c.kind };
+    } else if (p.get('merchant')) {
+      const t = one('SELECT payee, category_id FROM transactions WHERE merchant=? ORDER BY date DESC LIMIT 1', p.get('merchant'));
+      if (!t) throw httpErr(404, 'Tegenpartij niet gevonden');
+      where = 't.merchant=?'; args = [p.get('merchant')];
+      head = { type: 'merchant', merchant: p.get('merchant'), title: t.payee, icon: '🏪', color: '#6b7280' };
+    } else throw httpErr(400, 'category of merchant vereist');
+    const rows = q(`SELECT substr(t.date,1,7) mo, SUM(t.amount) v, COUNT(*) n FROM transactions t WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY mo`, ...args, from, to);
+    const net = rows.reduce((a, r) => a + r.v, 0), sign = kind === 'income' || (head.type === 'merchant' && net > 0) ? 1 : -1;
+    const by = Object.fromEntries(rows.map(r => [r.mo, r.v * sign]));
+    const monthly = list.map(mo => ({ month: mo, value: by[mo] ?? 0 }));
+    const total = monthly.reduce((a, r) => a + r.value, 0), count = rows.reduce((a, r) => a + r.n, 0);
+    const active = monthly.filter(r => r.value !== 0).length;
+    const biggest = one(`SELECT t.payee, t.date, t.amount FROM transactions t WHERE ${where} AND t.date>=? AND t.date<=? ORDER BY ${sign === 1 ? 't.amount DESC' : 't.amount ASC'} LIMIT 1`, ...args, from, to);
+    const merchants = head.type === 'category' ? q(`SELECT t.merchant, MAX(t.payee) name, SUM(t.amount)*? v, COUNT(*) n FROM transactions t WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY t.merchant ORDER BY v DESC LIMIT 10`, sign, ...args, from, to) : [];
+    const categories = head.type === 'merchant' ? q(`SELECT c.id, COALESCE(c.name,'Zonder categorie') name, COALESCE(c.icon,'❔') icon, COALESCE(c.color,'#9ca3af') color, SUM(t.amount)*? v, COUNT(*) n FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY c.id ORDER BY v DESC`, sign, ...args, from, to) : [];
+    const recent = q(`SELECT t.id, t.date, t.amount, t.payee, t.description, t.category_id FROM transactions t WHERE ${where} ORDER BY t.date DESC, t.id DESC LIMIT 12`, ...args);
+    const first = one(`SELECT MIN(t.date) d FROM transactions t WHERE ${where}`, ...args).d;
+    return { ...head, months: list, monthly, total, count, avg: Math.round(total / n), avgActive: active ? Math.round(total / active) : 0, active, biggest, merchants, categories, recent, first, sign };
+  }
+
   const routes = {
+    'GET /api/detail': (_, __, u) => detail(u),
     'GET /api/categories': () => q(`SELECT c.* FROM categories c ORDER BY CASE c.kind WHEN 'income' THEN 0 WHEN 'expense' THEN 1 ELSE 2 END, ${GRP_ORDER}, c.grp, c.name`),
     'POST /api/categories': b => {
       if (!b.name?.trim()) throw httpErr(400, 'Naam ontbreekt');
@@ -205,22 +242,29 @@ export function createApi(db, ctx = {}) {
       const t = one('SELECT * FROM transactions WHERE id=?', id);
       if (!t) throw httpErr(404, 'Transactie niet gevonden');
       if (b.notes !== undefined) run('UPDATE transactions SET notes=? WHERE id=?', String(b.notes).slice(0, 500), id);
-      let similar = 0;
-      if ('category_id' in b) {
-        if (b.category_id) needCat(b.category_id);
+      if (!('category_id' in b)) return { ok: true, similar: 0 };
+      if (b.category_id) needCat(b.category_id);
+      return withUndo([id], () => {
         setCategory(db, [id], b.category_id || null);
-        if (b.category_id) similar = recategorize(db);
-      }
-      return { ok: true, similar };
+        return { ok: true, similar: b.category_id ? recategorize(db) : 0 };
+      });
     },
     'DELETE /api/transactions/:id': (_, { id }) => { run('DELETE FROM transactions WHERE id=?', id); return { ok: true }; },
     'POST /api/transactions/bulk': b => {
       if (!Array.isArray(b.ids) || !b.ids.length) throw httpErr(400, 'Geen transacties geselecteerd');
       if (b.category_id) needCat(b.category_id);
-      const n = setCategory(db, b.ids, b.category_id || null);
-      return { ok: true, updated: n, similar: b.category_id ? recategorize(db) : 0 };
+      return withUndo(b.ids, () => {
+        const n = setCategory(db, b.ids, b.category_id || null);
+        return { ok: true, updated: n, similar: b.category_id ? recategorize(db) : 0 };
+      });
     },
-    'POST /api/transactions/confirm': b => ({ confirmed: confirmSuggestions(db, b.ids || []), similar: recategorize(db) }),
+    'POST /api/transactions/confirm': b => withUndo(b.ids || [], () => ({ confirmed: confirmSuggestions(db, b.ids || []), similar: recategorize(db) })),
+    'POST /api/undo': b => {
+      const snap = undoStack.get(Number(b.id));
+      if (!snap) throw httpErr(404, 'Er is niets meer om ongedaan te maken');
+      undoStack.delete(Number(b.id));
+      return { ok: true, restored: snap.rows.length, changed: restore(db, snap) };
+    },
 
     'GET /api/review': () => review(),
     'POST /api/recategorize': () => ({ changed: recategorize(db) }),

@@ -121,3 +121,32 @@ test('end-to-end: import, deduplicatie, review, leren van correcties', () => {
   assert.equal(cat, id('other'));
   assert.equal(confirmSuggestions(db, [ids[3]]), 1);
 });
+
+test('ongedaan maken herstelt categorie én geheugen', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:');
+  const api = createApi(db);
+  importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  const t = db.prepare("SELECT id FROM transactions WHERE merchant='dierenspeciaalzaak kat' ORDER BY id LIMIT 1").get();
+  const before = db.prepare('SELECT COUNT(*) c FROM memory').get().c;
+  const r = await api('PATCH', '/api/transactions/' + t.id, { category_id: id('shopping') });
+  assert.ok(r.undo); assert.ok(r.similar >= 5);
+  assert.ok(db.prepare('SELECT COUNT(*) c FROM memory').get().c > before);
+  await api('POST', '/api/undo', { id: r.undo });
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM memory').get().c, before);
+  const left = db.prepare("SELECT COUNT(*) c FROM transactions WHERE merchant='dierenspeciaalzaak kat' AND category_id IS NOT NULL").get().c;
+  assert.equal(left, 0);
+  await assert.rejects(() => api('POST', '/api/undo', { id: r.undo }), /niets meer/);
+});
+
+test('detail-API: categorie en tegenpartij', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:'); const api = createApi(db);
+  importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  const c = await api('GET', `/api/detail?category=${id('rent')}&months=12`);
+  assert.equal(c.monthly.length, 12); assert.equal(c.monthly.at(-1).value, 105000); assert.equal(c.total, 105000 * 12);
+  assert.equal(c.merchants[0].name, 'Woonbron');
+  const m = await api('GET', '/api/detail?merchant=werkgever%20acme');
+  assert.equal(m.sign, 1); assert.ok(m.total > 0); assert.equal(m.categories[0].name, 'Salaris');
+  await assert.rejects(() => api('GET', '/api/detail'), /vereist/);
+});

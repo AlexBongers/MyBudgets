@@ -133,8 +133,9 @@ td.sub{color:var(--muted);font-size:12px;max-width:380px;overflow:hidden;text-ov
 .form{display:grid;grid-template-columns:130px 1fr;gap:8px 12px;align-items:center}
 .form label{color:var(--muted);font-size:12.5px}
 @keyframes fade{from{opacity:0}}
-#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(30,30,32,.94);color:#fff;padding:9px 16px;border-radius:10px;opacity:0;pointer-events:none;transition:.2s;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.3)}
-#toast.show{opacity:1;transform:translateX(-50%)}
+#toast{display:flex;gap:12px;align-items:center;position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(30,30,32,.94);color:#fff;padding:9px 16px;border-radius:10px;opacity:0;pointer-events:none;transition:.2s;z-index:99;max-width:80vw;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+#toast.show{opacity:1;transform:translateX(-50%);pointer-events:auto}
+.toast-btn{border:0;background:none;color:#64d2ff;font:inherit;font-weight:600;cursor:default;padding:0}
 svg text{fill:var(--muted);font-size:11px;font-family:inherit}
 .cat-input{width:200px;max-width:100%}
 kbd{background:var(--hover);border-radius:4px;padding:0 5px;font:inherit;font-size:11px}

@@ -217,6 +217,27 @@ export function confirmSuggestions(db, ids) {
   });
 }
 
+// ---------- ongedaan maken ----------
+// Snapshot van de toestand van transacties + het geleerde geheugen dat erdoor kan veranderen.
+export function snapshot(db, ids) {
+  const get = db.prepare('SELECT id, category_id, cat_source, cat_conf, cat_reason, confirmed, merchant, counter_iban FROM transactions WHERE id=?');
+  const rows = ids.map(id => get.get(id)).filter(Boolean);
+  const keys = new Set();
+  for (const r of rows) { if (r.merchant) keys.add('m:' + r.merchant); if (r.counter_iban) keys.add('i:' + r.counter_iban.toUpperCase()); }
+  const mem = db.prepare('SELECT key, category_id, n, label FROM memory WHERE key=?');
+  return { rows, keys: [...keys], memory: [...keys].flatMap(k => mem.all(k)) };
+}
+export function restore(db, snap) {
+  return tx(db, () => {
+    const up = db.prepare('UPDATE transactions SET category_id=?, cat_source=?, cat_conf=?, cat_reason=?, confirmed=? WHERE id=?');
+    for (const r of snap.rows) up.run(r.category_id, r.cat_source, r.cat_conf, r.cat_reason, r.confirmed, r.id);
+    const del = db.prepare('DELETE FROM memory WHERE key=?'), ins = db.prepare('INSERT INTO memory (key, category_id, n, label) VALUES (?,?,?,?)');
+    for (const k of snap.keys) del.run(k);
+    for (const m of snap.memory) ins.run(m.key, m.category_id, m.n, m.label);
+    return recategorize(db);
+  });
+}
+
 export function resetAll(db) {
   db.exec('DELETE FROM transactions; DELETE FROM memory; DELETE FROM budgets; DELETE FROM accounts;');
 }

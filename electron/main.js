@@ -85,7 +85,7 @@ function buildMenu() {
       { label: 'Back-up maken…', click: () => send({ action: 'backup' }) },
       { label: 'Back-up herstellen…', click: () => send({ action: 'restore' }) },
       { type: 'separator' }, isMac ? { role: 'close', label: 'Sluit venster' } : { role: 'quit', label: 'Afsluiten' }] },
-    { label: 'Bewerken', submenu: [{ role: 'undo', label: 'Ongedaan maken' }, { role: 'redo', label: 'Opnieuw' }, { type: 'separator' }, { role: 'cut', label: 'Knip' }, { role: 'copy', label: 'Kopieer' }, { role: 'paste', label: 'Plak' }, { role: 'selectAll', label: 'Selecteer alles' },
+    { label: 'Bewerken', submenu: [{ label: 'Ongedaan maken', accelerator: 'CmdOrCtrl+Z', click: () => send({ action: 'undo' }) }, { role: 'redo', label: 'Opnieuw' }, { type: 'separator' }, { role: 'cut', label: 'Knip' }, { role: 'copy', label: 'Kopieer' }, { role: 'paste', label: 'Plak' }, { role: 'selectAll', label: 'Selecteer alles' },
       { type: 'separator' }, { label: 'Zoeken in transacties', accelerator: 'CmdOrCtrl+F', click: () => send({ action: 'search' }) }] },
     { label: 'Weergave', submenu: [
       nav('Dashboard', 'dashboard', 1), nav('Te beoordelen', 'review', 2), nav('Transacties', 'transactions', 3), nav('Budget', 'budget', 4),

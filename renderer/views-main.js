@@ -38,11 +38,12 @@ V.dashboard = async () => {
     </div>
     <div class="grid g2">
       <div class="card"><h2>Budget <span class="right"><a href="#" data-go="budget">Aanpassen</a></span></h2>${d.budget.some(b => b.budget > 0) ? d.budget.filter(b => b.budget > 0).sort((a, b) => (b.spent / (b.budget || 1)) - (a.spent / (a.budget || 1))).slice(0, 8).map(b => `<div style="margin-bottom:11px"><div class="row between small"><span>${b.icon} ${esc(b.name)}</span><span class="muted">${eur0(b.spent)} / ${eur0(b.budget)}</span></div>${progressBar(b.spent, b.budget)}</div>`).join('') : '<div class="empty">Nog geen budget ingesteld.<br><button class="btn sm" data-go="budget" style="margin-top:8px">Budget instellen</button></div>'}</div>
-      <div class="card"><h2>Top tegenpartijen</h2>${d.topPayees.length ? `<table>${d.topPayees.map(x => `<tr><td>${x.icon} ${esc(x.payee)}</td><td class="muted small">${x.n}×</td><td class="num"><b>${eur(x.value)}</b></td></tr>`).join('')}</table>` : '<div class="empty">Geen data</div>'}</div>
+      <div class="card"><h2>Top tegenpartijen</h2>${d.topPayees.length ? `<table>${d.topPayees.map(x => `<tr data-payee="${esc(x.merchant)}" style="cursor:default"><td>${x.icon} ${esc(x.payee)}</td><td class="muted small">${x.n}×</td><td class="num"><b>${eur(x.value)}</b></td></tr>`).join('')}</table>` : '<div class="empty">Geen data</div>'}</div>
     </div>`);
   m.querySelectorAll('[data-go]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.go); }));
   m.querySelectorAll('[data-month]').forEach(g => g.addEventListener('click', () => { S.month = g.dataset.month; go('dashboard'); }));
-  m.querySelectorAll('[data-cat]').forEach(el => el.addEventListener('click', () => { S.txFilter = { category: el.dataset.cat || 'none', month: d.month }; go('transactions'); }));
+  m.querySelectorAll('[data-cat]').forEach(el => el.addEventListener('click', () => openCategory(el.dataset.cat ? +el.dataset.cat : null)));
+  m.querySelectorAll('[data-payee]').forEach(el => el.addEventListener('click', () => openMerchant(el.dataset.payee)));
 };
 
 function bindHero(m) {
@@ -72,7 +73,7 @@ V.review = async () => {
   const assign = guard(async (card, catId) => {
     const ids = card.dataset.ids.split(',').map(Number);
     const r = await POST('/transactions/bulk', { ids, category_id: Number(catId) });
-    card.classList.add('done'); toast(`${r.updated} ingedeeld${r.similar ? ` · +${r.similar} vergelijkbare automatisch` : ''}`);
+    card.classList.add('done'); toast(`${r.updated} ingedeeld${r.similar ? ` · +${r.similar} vergelijkbare automatisch` : ''}`, r.undo);
     setTimeout(() => V.review(), 280);
   });
   m.querySelectorAll('.rv').forEach(card => {
@@ -82,7 +83,7 @@ V.review = async () => {
   });
   $('#acceptall')?.addEventListener('click', guard(async () => {
     if (!(await ask('Alle suggesties bevestigen?', `Je bevestigt de voorgestelde categorie voor ${withSug.length} tegenpartijen. Je kunt dit later altijd nog aanpassen.`, 'Bevestigen'))) return;
-    const r = await POST('/transactions/confirm', { ids: withSug.flatMap(g => g.ids) }); toast(`${r.confirmed} bevestigd`); V.review();
+    const r = await POST('/transactions/confirm', { ids: withSug.flatMap(g => g.ids) }); toast(`${r.confirmed} bevestigd`, r.undo); V.review();
   }));
 };
 
@@ -136,7 +137,7 @@ V.transactions = async () => {
     el.innerHTML = selected.size ? `<div class="bulkbar"><b>${selected.size} geselecteerd</b><span class="spacer"></span>${catSelect(null, { none: 'Categorie kiezen…', attrs: 'id="bulkcat"' })}<button class="btn sm" id="bulkgo">Toepassen</button><button class="btn sm ghost" id="bulkx" style="color:inherit">✕</button></div>` : '';
     $('#bulkgo')?.addEventListener('click', guard(async () => {
       const cat = $('#bulkcat').value; if (!cat) return toast('Kies eerst een categorie');
-      const r = await POST('/transactions/bulk', { ids: [...selected], category_id: Number(cat) }); toast(`${r.updated} ingedeeld`); reload();
+      const r = await POST('/transactions/bulk', { ids: [...selected], category_id: Number(cat) }); toast(`${r.updated} ingedeeld`, r.undo); await refreshMeta(); reload();
     }));
     $('#bulkx')?.addEventListener('click', () => { selected.clear(); $$('.sel').forEach(c => c.checked = false); $('#selall').checked = false; bulk(); });
   };
@@ -156,7 +157,7 @@ V.transactions = async () => {
     if (e.target.classList.contains('sel')) { e.target.checked ? selected.add(id) : selected.delete(id); return bulk(); }
     if (e.target.classList.contains('rowcat')) {
       const r = await PATCH('/transactions/' + id, { category_id: e.target.value ? Number(e.target.value) : null });
-      toast(r.similar ? `Opgeslagen · ${r.similar} vergelijkbare automatisch ingedeeld` : 'Opgeslagen'); await refreshMeta(); reload();
+      toast(r.similar ? `Opgeslagen · ${r.similar} vergelijkbare automatisch ingedeeld` : 'Opgeslagen', r.undo); await refreshMeta(); reload();
     }
   }));
   $('#rows').addEventListener('click', e => { const a = e.target.closest('a.open'); if (a) { e.preventDefault(); txDetail(+a.closest('tr').dataset.id); } });
@@ -175,9 +176,9 @@ async function txDetail(id) {
       <label>Categorie</label><div>${catChip(c)}</div>
       <label>Waarom?</label><div class="muted">${esc(row.cat_reason || (row.category_id ? '' : 'Geen categorie gevonden'))} ${row.cat_source ? `<span class="tag">${SRC[row.cat_source]}</span>` : ''}</div>
       <label>Notitie</label><textarea id="note" rows="2" placeholder="Eigen notitie…">${esc(row.notes)}</textarea></div>
-    <div class="foot"><button class="btn danger" id="del">Verwijderen</button><span class="spacer" style="flex:1"></span><button class="btn" id="rule">Regel maken…</button><button class="btn" id="same">Alles van deze partij</button><button class="btn primary" id="save">Opslaan</button></div>`);
+    <div class="foot"><button class="btn danger" id="del">Verwijderen</button><span class="spacer" style="flex:1"></span><button class="btn" id="rule">Regel maken…</button><button class="btn" id="same">Overzicht partij</button><button class="btn primary" id="save">Opslaan</button></div>`);
   m.$('#save').onclick = guard(async () => { await PATCH('/transactions/' + id, { notes: m.$('#note').value }); m.close(); toast('Opgeslagen'); V.transactions(); });
-  m.$('#same').onclick = () => { m.close(); S.txFilter = { merchant: row.merchant, all: true }; V.transactions(); };
+  m.$('#same').onclick = () => { m.close(); openMerchant(row.merchant); };
   m.$('#rule').onclick = () => { m.close(); ruleModal(null, { field: 'payee', op: 'contains', pattern: row.payee, category_id: row.category_id }); };
   m.$('#del').onclick = guard(async () => { if (await ask('Transactie verwijderen?', 'Dit kan niet ongedaan worden gemaakt. Bij een nieuwe import komt hij weer terug.', 'Verwijderen', true)) { await DEL('/transactions/' + id); m.close(); toast('Verwijderd'); await refreshMeta(); V.transactions(); } });
 }
