@@ -10,8 +10,8 @@ Vereist [Node.js](https://nodejs.org) ≥ 22.13 (aanbevolen: LTS).
 ```bash
 npm install
 npm start          # opent de app
-npm test           # parser, categoriseermodule, corpus, service, server (45 tests)
-npm run e2e        # doorloopt de echte app (14 controles, tijdelijke database)
+npm test           # parser, categoriseermodule, corpus, service, server (58 tests)
+npm run e2e        # doorloopt de echte app (17 controles, tijdelijke database)
 npm run dist       # bouwt dist/MyBudgets-*.dmg (Apple Silicon + Intel)
 ```
 

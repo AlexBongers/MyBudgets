@@ -32,8 +32,15 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
   await win.click('[data-tab=recurring]'); await win.waitForSelector('tr[data-m]'); ok('vaste lasten herkend', (await win.locator('tr[data-m]').count()) >= 8);
   await win.click('[data-tab=reports]'); await win.waitForSelector('.heat'); ok('rapport toont spaarquote', (await win.innerText('.heat')).includes('Spaarquote'));
 
+  // Notion-import via de native bestandsdialoog (gestubd): bestaande Rabobank-transacties worden verrijkt
+  await app.evaluate(({ dialog }, p) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [p] }); }, path.join(__dirname, '..', 'samples', 'notion-demo.zip'));
+  await win.evaluate(() => go('notion')); await win.waitForSelector('#ndz'); await win.click('#ndz'); await win.waitForSelector('#nplan table');
+  ok('notion: tabellen herkend', (await win.locator('#ntabs button').count()) === 2);
+  ok('notion: voorbeeld toont verrijking', (await win.innerText('#nplan')).includes('622 bestaande verrijkt'));
+  await win.click('#ngo'); await win.waitForSelector('.hero h2'); ok('notion: import klaar', (await win.innerText('.hero .card')).includes('622 bestaande transacties verrijkt'));
+
   await win.click('[data-tab=settings]'); await win.waitForSelector('#theme');
-  ok('importgeschiedenis aanwezig', (await win.locator('[data-undo-import]').count()) === 1);
+  ok('importgeschiedenis aanwezig', (await win.locator('[data-undo-import]').count()) >= 1);
   await win.click('#theme [data-v=dark]'); ok('donker thema', (await win.evaluate(() => document.documentElement.dataset.theme)) === 'dark');
 
   const pdf = path.join(tmp, 'scherm.pdf');
