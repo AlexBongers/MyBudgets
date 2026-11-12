@@ -12,26 +12,62 @@
     "web": "node src/server.js",
     "test": "node --no-warnings --test test/*.test.js",
     "demo-csv": "node samples/generate.js > samples/rabobank-demo.csv",
+    "e2e": "node scripts/e2e.cjs",
+    "bench": "node --no-warnings scripts/bench.js",
     "dist": "electron-builder --mac",
     "pack": "electron-builder --dir"
   },
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "build": {
     "appId": "nl.mybudgets.app",
     "productName": "MyBudgets",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["electron/**", "src/**", "renderer/**", "samples/rabobank-demo.csv", "package.json"],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "src/**",
+      "renderer/**",
+      "samples/rabobank-demo.csv",
+      "package.json"
+    ],
     "mac": {
       "category": "public.app-category.finance",
       "icon": "build/icon.png",
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "identity": null,
       "hardenedRuntime": false
     },
-    "dmg": { "title": "MyBudgets", "contents": [{ "x": 140, "y": 190 }, { "x": 400, "y": 190, "type": "link", "path": "/Applications" }] }
+    "dmg": {
+      "title": "MyBudgets",
+      "contents": [
+        {
+          "x": 140,
+          "y": 190
+        },
+        {
+          "x": 400,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
   },
   "devDependencies": {
     "electron": "^45.3.1",
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.0.0",
+    "playwright-core": "^1.65.0"
   }
 }
