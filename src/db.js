@@ -1,0 +1,222 @@
+import { DatabaseSync } from 'node:sqlite';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { Categorizer, AUTO_THRESHOLD } from './categorizer.js';
+import { merchantKey, displayName, tokensOf, tidyDescription } from './normalize.js';
+
+export { AUTO_THRESHOLD };
+export const SCHEMA_VERSION = 2;
+
+export function openDb(path = 'data/budget.db') {
+  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+  const db = new DatabaseSync(path);
+  db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
+  migrate(db);
+  if (db.prepare('SELECT COUNT(*) c FROM categories').get().c === 0) seedCategories(db);
+  return db;
+}
+
+const cols = (db, t) => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+
+function migrate(db) {
+  const v = db.prepare('PRAGMA user_version').get().user_version;
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS accounts (
+      id INTEGER PRIMARY KEY, iban TEXT NOT NULL UNIQUE, name TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL DEFAULT 'expense' CHECK (kind IN ('expense','income','transfer')),
+      color TEXT NOT NULL DEFAULT '#6b7280'
+    );
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY, date TEXT NOT NULL, amount INTEGER NOT NULL,
+      payee TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+      account TEXT NOT NULL DEFAULT '', counter_iban TEXT NOT NULL DEFAULT '',
+      category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+      key TEXT UNIQUE
+    );
+    CREATE TABLE IF NOT EXISTS budgets (
+      category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+      month TEXT NOT NULL, amount INTEGER NOT NULL, PRIMARY KEY (category_id, month)
+    );
+    CREATE TABLE IF NOT EXISTS memory (
+      key TEXT NOT NULL, category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+      n INTEGER NOT NULL DEFAULT 1, label TEXT NOT NULL DEFAULT '', PRIMARY KEY (key, category_id)
+    );
+  `);
+  const addCol = (t, c, def) => { if (!cols(db, t).includes(c)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${c} ${def}`); };
+  addCol('categories', 'key', 'TEXT');
+  addCol('categories', 'icon', "TEXT NOT NULL DEFAULT '🏷️'");
+  addCol('categories', 'grp', "TEXT NOT NULL DEFAULT 'Overig'");
+  addCol('transactions', 'account_id', 'INTEGER REFERENCES accounts(id) ON DELETE SET NULL');
+  addCol('transactions', 'code', "TEXT NOT NULL DEFAULT ''");
+  addCol('transactions', 'seq', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('transactions', 'balance', 'INTEGER');
+  addCol('transactions', 'merchant', "TEXT NOT NULL DEFAULT ''");
+  addCol('transactions', 'cat_source', 'TEXT');
+  addCol('transactions', 'cat_conf', 'REAL NOT NULL DEFAULT 0');
+  addCol('transactions', 'cat_reason', "TEXT NOT NULL DEFAULT ''");
+  addCol('transactions', 'confirmed', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('transactions', 'notes', "TEXT NOT NULL DEFAULT ''");
+  // v1-regels (alleen patroon) -> nieuw regelformaat
+  if (!cols(db, 'rules').length || !cols(db, 'rules').includes('field')) {
+    const old = cols(db, 'rules').length ? db.prepare('SELECT pattern, category_id FROM rules').all() : [];
+    db.exec('DROP TABLE IF EXISTS rules');
+    db.exec(`CREATE TABLE rules (
+      id INTEGER PRIMARY KEY, field TEXT NOT NULL DEFAULT 'any', op TEXT NOT NULL DEFAULT 'contains',
+      pattern TEXT NOT NULL DEFAULT '', direction TEXT NOT NULL DEFAULT 'any',
+      amount_min INTEGER, amount_max INTEGER, priority INTEGER NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1, category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE
+    )`);
+    const ins = db.prepare('INSERT INTO rules (pattern, category_id) VALUES (?,?)');
+    old.forEach(r => ins.run(r.pattern, r.category_id));
+  }
+  db.exec(`CREATE INDEX IF NOT EXISTS tx_date ON transactions(date);
+           CREATE INDEX IF NOT EXISTS tx_merchant ON transactions(merchant);
+           CREATE INDEX IF NOT EXISTS tx_cat ON transactions(category_id);`);
+  if (v < SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+}
+
+// key, naam, soort, groep, icoon, kleur
+export const DEFAULT_CATEGORIES = [
+  ['salary', 'Salaris', 'income', 'Inkomen', '💼', '#16a34a'],
+  ['benefits', 'Toeslagen & uitkeringen', 'income', 'Inkomen', '🏛️', '#22c55e'],
+  ['other_income', 'Overig inkomen', 'income', 'Inkomen', '💶', '#4ade80'],
+  ['rent', 'Huur / hypotheek', 'expense', 'Wonen', '🏠', '#3b82f6'],
+  ['energy', 'Energie', 'expense', 'Wonen', '💡', '#eab308'],
+  ['water', 'Water', 'expense', 'Wonen', '🚰', '#06b6d4'],
+  ['telecom', 'Internet & telefoon', 'expense', 'Wonen', '📡', '#0ea5e9'],
+  ['taxes', 'Belastingen & heffingen', 'expense', 'Wonen', '🧾', '#64748b'],
+  ['home', 'Inrichting & klussen', 'expense', 'Wonen', '🛠️', '#60a5fa'],
+  ['groceries', 'Boodschappen', 'expense', 'Dagelijks', '🛒', '#f59e0b'],
+  ['dining', 'Uit eten & drinken', 'expense', 'Dagelijks', '🍽️', '#ef4444'],
+  ['drugstore', 'Drogist & verzorging', 'expense', 'Dagelijks', '🧴', '#f472b6'],
+  ['transit', 'Openbaar vervoer', 'expense', 'Vervoer', '🚆', '#8b5cf6'],
+  ['fuel', 'Brandstof & laden', 'expense', 'Vervoer', '⛽', '#a78bfa'],
+  ['car', 'Auto', 'expense', 'Vervoer', '🚗', '#6366f1'],
+  ['healthins', 'Zorgverzekering', 'expense', 'Zorg & verzekeringen', '🩺', '#14b8a6'],
+  ['health', 'Zorgkosten', 'expense', 'Zorg & verzekeringen', '💊', '#2dd4bf'],
+  ['insurance', 'Verzekeringen', 'expense', 'Zorg & verzekeringen', '🛡️', '#0d9488'],
+  ['subscriptions', 'Abonnementen', 'expense', 'Vrije tijd', '📺', '#ec4899'],
+  ['shopping', 'Kleding & shopping', 'expense', 'Vrije tijd', '🛍️', '#f97316'],
+  ['leisure', 'Uitjes & entertainment', 'expense', 'Vrije tijd', '🎟️', '#a855f7'],
+  ['travel', 'Vakantie & reizen', 'expense', 'Vrije tijd', '✈️', '#d946ef'],
+  ['sports', 'Sport', 'expense', 'Vrije tijd', '🏋️', '#84cc16'],
+  ['gifts', 'Cadeaus & goede doelen', 'expense', 'Vrije tijd', '🎁', '#fb7185'],
+  ['education', 'Onderwijs & kinderopvang', 'expense', 'Overig', '🎓', '#38bdf8'],
+  ['bank', 'Bankkosten', 'expense', 'Overig', '🏦', '#94a3b8'],
+  ['cash', 'Contant geld', 'expense', 'Overig', '💵', '#78716c'],
+  ['other', 'Overig', 'expense', 'Overig', '🧩', '#6b7280'],
+  ['transfer', 'Sparen / eigen rekening', 'transfer', 'Overboekingen', '🔁', '#94a3b8'],
+  ['invest', 'Beleggen & pensioen', 'transfer', 'Overboekingen', '📈', '#64748b'],
+];
+
+function seedCategories(db) {
+  const ins = db.prepare('INSERT INTO categories (key, name, kind, grp, icon, color) VALUES (?,?,?,?,?,?)');
+  db.exec('BEGIN');
+  for (const [key, name, kind, grp, icon, color] of DEFAULT_CATEGORIES) ins.run(key, name, kind, grp, icon, color);
+  db.exec('COMMIT');
+}
+
+// ---------- categorizer laden ----------
+export function loadCategorizer(db) {
+  const categories = db.prepare('SELECT id, key, name, kind FROM categories').all();
+  const rules = db.prepare('SELECT * FROM rules').all();
+  const memory = db.prepare('SELECT key, category_id, n FROM memory').all();
+  const ownIbans = db.prepare('SELECT iban FROM accounts').all().map(a => a.iban);
+  const training = db.prepare(`SELECT payee, description, amount, code, category_id FROM transactions
+    WHERE confirmed=1 AND category_id IS NOT NULL ORDER BY id DESC LIMIT 4000`).all()
+    .map(t => ({ ...t, tokens: tokensOf(t) }));
+  return new Categorizer({ categories, rules, memory, ownIbans, training });
+}
+
+const tx = (db, fn) => { db.exec('BEGIN'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
+
+// ---------- importeren ----------
+export function importTransactions(db, parsed) {
+  return tx(db, () => {
+    const getAcc = db.prepare('SELECT id FROM accounts WHERE iban=?');
+    const insAcc = db.prepare('INSERT INTO accounts (iban, name) VALUES (?,?)');
+    const accId = new Map(); const newAccounts = [];
+    for (const t of parsed) {
+      if (accId.has(t.account)) continue;
+      let a = getAcc.get(t.account);
+      if (!a) { insAcc.run(t.account, t.account ? 'Rekening ' + t.account.slice(-4) : 'Rekening'); a = getAcc.get(t.account); newAccounts.push(t.account); }
+      accId.set(t.account, a.id);
+    }
+    const ins = db.prepare(`INSERT OR IGNORE INTO transactions
+      (date, amount, payee, description, account, account_id, counter_iban, code, seq, balance, merchant, key)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+    let added = 0, from = null, to = null;
+    for (const t of parsed) {
+      const r = ins.run(t.date, t.amount, displayName(t.payee), tidyDescription(t.description), t.account, accId.get(t.account),
+        t.counter_iban, t.code, t.seq, t.balance, merchantKey(t.payee, t.description), t.key);
+      if (r.changes) { added++; if (!from || t.date < from) from = t.date; if (!to || t.date > to) to = t.date; }
+    }
+    const changed = recategorize(db);
+    const rev = db.prepare(`SELECT COUNT(*) c FROM transactions WHERE confirmed=0 AND (category_id IS NULL OR cat_conf < ${AUTO_THRESHOLD - 0.001})`).get().c;
+    return { added, skipped: parsed.length - added, from, to, newAccounts: newAccounts.length, review: rev, recategorized: changed };
+  });
+}
+
+// Herclassificeer alle nog niet bevestigde transacties (bevestigde blijven onaangetast).
+export function recategorize(db, cz = loadCategorizer(db)) {
+  const rows = db.prepare('SELECT id, payee, description, amount, counter_iban, code, merchant, category_id, cat_source, cat_conf FROM transactions WHERE confirmed=0').all();
+  const up = db.prepare('UPDATE transactions SET category_id=?, cat_source=?, cat_conf=?, cat_reason=? WHERE id=?');
+  let changed = 0;
+  for (const r of rows) {
+    const c = cz.classify(r);
+    const cat = c?.category_id ?? null, src = c?.source ?? null, conf = c?.confidence ?? 0;
+    if (cat !== r.category_id || src !== r.cat_source || Math.abs(conf - r.cat_conf) > 1e-9) {
+      up.run(cat, src, conf, c?.reason ?? '', r.id);
+      if (cat !== r.category_id) changed++;
+    }
+  }
+  return changed;
+}
+
+// ---------- handmatig indelen + leren ----------
+function learn(db, t, categoryId) {
+  const bump = (key, label) => {
+    // Correctie weegt zwaarder: andere categorieën voor dezelfde sleutel worden gehalveerd.
+    db.prepare('UPDATE memory SET n = n / 2 WHERE key=? AND category_id<>?').run(key, categoryId);
+    db.prepare('DELETE FROM memory WHERE key=? AND n<=0').run(key);
+    db.prepare(`INSERT INTO memory (key, category_id, n, label) VALUES (?,?,1,?)
+      ON CONFLICT(key, category_id) DO UPDATE SET n = n + 1, label = excluded.label`).run(key, categoryId, label);
+  };
+  if (t.merchant) bump('m:' + t.merchant, t.payee);
+  if (t.counter_iban && !['id', 'ba', 'bc', 'ga', 'cc'].includes(t.code)) bump('i:' + t.counter_iban.toUpperCase(), t.payee);
+}
+
+// ids krijgen handmatig een categorie (of null = wissen). Geeft aantal gewijzigde rijen.
+export function setCategory(db, ids, categoryId, { learnFrom = true } = {}) {
+  return tx(db, () => {
+    const get = db.prepare('SELECT * FROM transactions WHERE id=?');
+    const up = db.prepare('UPDATE transactions SET category_id=?, cat_source=?, cat_conf=?, cat_reason=?, confirmed=? WHERE id=?');
+    let n = 0;
+    for (const id of ids) {
+      const t = get.get(id); if (!t) continue;
+      if (categoryId) {
+        up.run(categoryId, 'manual', 1, 'Handmatig ingedeeld', 1, id);
+        if (learnFrom) learn(db, t, categoryId);
+      } else up.run(null, null, 0, '', 0, id);
+      n++;
+    }
+    return n;
+  });
+}
+
+export function confirmSuggestions(db, ids) {
+  return tx(db, () => {
+    const get = db.prepare('SELECT * FROM transactions WHERE id=? AND category_id IS NOT NULL');
+    const up = db.prepare("UPDATE transactions SET confirmed=1, cat_source='manual', cat_conf=1, cat_reason='Bevestigd' WHERE id=?");
+    let n = 0;
+    for (const id of ids) { const t = get.get(id); if (!t) continue; up.run(id); learn(db, t, t.category_id); n++; }
+    return n;
+  });
+}
+
+export function resetAll(db) {
+  db.exec('DELETE FROM transactions; DELETE FROM memory; DELETE FROM budgets; DELETE FROM accounts;');
+}

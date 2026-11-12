@@ -1,0 +1,183 @@
+'use strict';
+const V = {};
+const SRC = { rule: 'regel', own: 'eigen rekening', memory: 'geleerd', builtin: 'bekend', heur: 'afgeleid', ml: 'suggestie', manual: 'handmatig' };
+
+function emptyHero() {
+  return `<div class="hero"><div class="big">🌷</div><h2>Welkom bij MyBudgets</h2>
+    <p>Importeer je Rabobank-transacties en krijg direct inzicht. Alles blijft lokaal op je Mac.</p>
+    <div class="row" style="justify-content:center;margin-bottom:26px"><button class="btn primary" data-act="import">Rabobank CSV kiezen…</button><button class="btn" data-act="demo">Probeer met voorbeelddata</button></div>
+    <div class="card" style="text-align:left"><h2>Zo exporteer je uit Rabo Internetbankieren</h2>
+      <ol class="steps"><li>Log in en open je <b>betaalrekening</b> → <b>Transacties</b>.</li><li>Kies <b>Downloaden</b> en selecteer de periode (bijv. het hele laatste jaar).</li>
+      <li>Kies formaat <b>CSV</b> (kommagescheiden) en download het bestand.</li><li>Sleep het bestand in dit venster of kies <kbd>⌘O</kbd>.</li></ol></div></div>`;
+}
+
+V.dashboard = async () => {
+  const d = await GET('/dashboard' + (S.month ? '?month=' + S.month : ''));
+  setMonth(d.month, d.months); S.accounts = d.accounts; S.review = d.review; S.hasData = d.txCount > 0; updateNav();
+  if (!d.txCount) { const m = render(emptyHero()); bindHero(m); return; }
+  const t = d.totals, p = d.prevTotals, net = t.income - t.expenses, rate = t.income > 0 ? Math.round(net / t.income * 100) : null;
+  const bal = d.accounts.filter(a => a.balance != null).reduce((a, b) => a + b.balance, 0), hasBal = d.accounts.some(a => a.balance != null);
+  const totBudget = d.budget.reduce((a, b) => a + b.budget, 0);
+  const rec = d.recurringMonthly;
+  const m = render(`
+    ${d.review ? `<div class="banner"><span>📥</span><span><b>${d.review}</b> transactie${d.review === 1 ? '' : 's'} wacht${d.review === 1 ? '' : 'en'} op je beoordeling.</span><span class="spacer"></span><button class="btn primary sm" data-go="review">Beoordelen</button></div>` : ''}
+    <div class="grid g4" style="margin-bottom:16px">
+      <div class="card kpi"><h2>Inkomsten</h2><div class="v pos">${eur(t.income)}</div><div class="sub">${deltaChip(t.income, p.income, false)}</div></div>
+      <div class="card kpi"><h2>Uitgaven</h2><div class="v">${eur(t.expenses)}</div><div class="sub">${deltaChip(t.expenses, p.expenses, true)}${totBudget ? `<span>van ${eur0(totBudget)} budget</span>` : ''}</div></div>
+      <div class="card kpi"><h2>Over / tekort</h2><div class="v ${net >= 0 ? 'pos' : 'neg'}">${eurSigned(net)}</div><div class="sub">${rate !== null ? `Spaarquote ${rate}%` : 'Nog geen inkomen deze maand'}</div></div>
+      <div class="card kpi"><h2>Saldo</h2><div class="v">${hasBal ? eur(bal) : '–'}</div><div class="sub">${d.accounts.length} rekening${d.accounts.length === 1 ? '' : 'en'}${rec ? ` · vaste lasten ${eur0(rec)}/mnd` : ''}</div></div>
+    </div>
+    <div class="grid g21" style="margin-bottom:16px">
+      <div class="card"><h2>Uitgaven deze maand <span class="right"><span class="dot" style="background:var(--accent)"></span> ${monthName(d.month)} &nbsp;<span class="dot" style="background:var(--faint)"></span> vorige maand</span></h2>${lineChart(d.cumul, totBudget, d.projection?.expenses)}</div>
+      <div class="card"><h2>Inzichten</h2>${d.insights.length ? d.insights.map(i => `<div class="insight"><span class="ic ${i.type}"></span><span>${esc(i.text)}</span></div>`).join('') : '<div class="empty">Nog geen inzichten</div>'}</div>
+    </div>
+    <div class="grid g2" style="margin-bottom:16px">
+      <div class="card"><h2>Laatste 12 maanden <span class="right"><span class="dot" style="background:var(--good)"></span> inkomsten &nbsp;<span class="dot" style="background:var(--bad)"></span> uitgaven</span></h2>${barChart(d.trend, d.month)}</div>
+      <div class="card"><h2>Uitgaven per categorie</h2><div class="row" style="gap:16px;align-items:flex-start;flex-wrap:nowrap" id="catdonut">${donut(d.byCategory)}
+        <div class="legend">${d.byCategory.slice(0, 9).map(c => `<div class="li" data-cat="${c.id ?? ''}"><span><i class="dot" style="background:${c.color}"></i> ${c.icon} ${esc(c.name)}</span><span class="nowrap"><b>${eur0(c.value)}</b> ${c.prev && Math.abs(c.value - c.prev) > c.prev * 0.05 ? deltaChip(c.value, c.prev, true) : ''}</span></div>`).join('')}</div></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h2>Budget <span class="right"><a href="#" data-go="budget">Aanpassen</a></span></h2>${d.budget.some(b => b.budget > 0) ? d.budget.filter(b => b.budget > 0).sort((a, b) => (b.spent / (b.budget || 1)) - (a.spent / (a.budget || 1))).slice(0, 8).map(b => `<div style="margin-bottom:11px"><div class="row between small"><span>${b.icon} ${esc(b.name)}</span><span class="muted">${eur0(b.spent)} / ${eur0(b.budget)}</span></div>${progressBar(b.spent, b.budget)}</div>`).join('') : '<div class="empty">Nog geen budget ingesteld.<br><button class="btn sm" data-go="budget" style="margin-top:8px">Budget instellen</button></div>'}</div>
+      <div class="card"><h2>Top tegenpartijen</h2>${d.topPayees.length ? `<table>${d.topPayees.map(x => `<tr><td>${x.icon} ${esc(x.payee)}</td><td class="muted small">${x.n}×</td><td class="num"><b>${eur(x.value)}</b></td></tr>`).join('')}</table>` : '<div class="empty">Geen data</div>'}</div>
+    </div>`);
+  m.querySelectorAll('[data-go]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.go); }));
+  m.querySelectorAll('[data-month]').forEach(g => g.addEventListener('click', () => { S.month = g.dataset.month; go('dashboard'); }));
+  m.querySelectorAll('[data-cat]').forEach(el => el.addEventListener('click', () => { S.txFilter = { category: el.dataset.cat || 'none', month: d.month }; go('transactions'); }));
+};
+
+function bindHero(m) {
+  m.querySelector('[data-act=import]')?.addEventListener('click', () => go('import'));
+  m.querySelector('[data-act=demo]')?.addEventListener('click', guard(async () => { const r = await POST('/demo'); toast(`${r.added} voorbeeldtransacties geladen`); S.month = null; await refreshMeta(); go('dashboard'); }));
+}
+
+// ---------- Te beoordelen ----------
+V.review = async () => {
+  const groups = await GET('/review');
+  S.review = groups.reduce((a, g) => a + g.count, 0); updateNav();
+  if (!groups.length) { render(`<div class="hero"><div class="big">✅</div><h2>Alles is ingedeeld</h2><p>Geen transacties die je aandacht nodig hebben. Nieuwe imports worden automatisch gecategoriseerd; wat de module niet zeker weet, verschijnt hier.</p><button class="btn primary" data-go="dashboard">Naar dashboard</button></div>`).querySelector('[data-go]').onclick = () => go('dashboard'); return; }
+  const withSug = groups.filter(g => g.suggestions.length);
+  const m = render(`
+    <div class="row between" style="margin-bottom:14px"><div><b>${groups.length}</b> tegenpartijen · <b>${S.review}</b> transacties <span class="muted">— deel in per tegenpartij; MyBudgets leert van je keuzes.</span></div>
+      ${withSug.length ? `<button class="btn" id="acceptall">✓ Bevestig alle suggesties (${withSug.reduce((a, g) => a + g.count, 0)})</button>` : ''}</div>
+    <div class="stack" id="rvlist">${groups.map(g => {
+      const sug = g.suggestions.slice(0, 2);
+      return `<div class="card rv" data-merchant="${esc(g.merchant)}" data-ids="${g.ids.join(',')}">
+        <div style="min-width:0"><div class="row"><b>${esc(g.name)}</b><span class="tag">${g.count} transactie${g.count === 1 ? '' : 's'}</span><span class="${g.total < 0 ? '' : 'pos'}"><b>${eur(g.total)}</b></span></div>
+          <div class="sample">${g.samples.map(s => `${fmtDay(s.date)} ${eur(s.amount)} ${esc(s.description.slice(0, 50))}`).join(' · ')}</div>
+          ${sug.length ? `<div class="small faint">${esc(sug[0].reason || '')}</div>` : '<div class="small faint">Geen suggestie — kies een categorie</div>'}</div>
+        <div class="rv-actions">${sug.map((s, i) => { const c = catById(s.category_id); return c ? `<button class="btn sm ${i ? '' : 'primary'}" data-accept="${c.id}" title="${esc(s.reason || '')}">${c.icon} ${esc(c.name)}${i ? '' : ' ✓'}</button>` : ''; }).join('')}
+          ${catSelect(null, { none: 'Andere categorie…', attrs: 'data-pick' })}
+          <button class="btn sm ghost" data-view title="Transacties tonen">↗</button></div></div>`;
+    }).join('')}</div>`);
+  const assign = guard(async (card, catId) => {
+    const ids = card.dataset.ids.split(',').map(Number);
+    const r = await POST('/transactions/bulk', { ids, category_id: Number(catId) });
+    card.classList.add('done'); toast(`${r.updated} ingedeeld${r.similar ? ` · +${r.similar} vergelijkbare automatisch` : ''}`);
+    setTimeout(() => V.review(), 280);
+  });
+  m.querySelectorAll('.rv').forEach(card => {
+    card.querySelectorAll('[data-accept]').forEach(b => b.addEventListener('click', () => assign(card, b.dataset.accept)));
+    card.querySelector('[data-pick]').addEventListener('change', e => e.target.value && assign(card, e.target.value));
+    card.querySelector('[data-view]').addEventListener('click', () => { S.txFilter = { merchant: card.dataset.merchant, all: true }; go('transactions'); });
+  });
+  $('#acceptall')?.addEventListener('click', guard(async () => {
+    if (!(await ask('Alle suggesties bevestigen?', `Je bevestigt de voorgestelde categorie voor ${withSug.length} tegenpartijen. Je kunt dit later altijd nog aanpassen.`, 'Bevestigen'))) return;
+    const r = await POST('/transactions/confirm', { ids: withSug.flatMap(g => g.ids) }); toast(`${r.confirmed} bevestigd`); V.review();
+  }));
+};
+
+// ---------- Transacties ----------
+V.transactions = async () => {
+  const f = S.txFilter = Object.assign({ sort: 'date', dir: 'desc' }, S.txFilter);
+  const selected = new Set(); let loaded = 0, total = 0;
+  const showAll = f.all || f.merchant || f.status || f.q;
+  const m = render(`
+    <div class="filters">
+      <input type="search" id="q" placeholder="Zoek op naam, omschrijving, IBAN…" value="${esc(f.q || '')}">
+      ${catSelect(f.category === 'none' ? '' : Number(f.category) || null, { none: 'Alle categorieën', attrs: 'id="fcat"' }).replace('</optgroup></select>', '</optgroup><option value="none" ' + (f.category === 'none' ? 'selected' : '') + '>❔ Zonder categorie</option></select>')}
+      ${S.accounts.length > 1 ? `<select id="facc"><option value="">Alle rekeningen</option>${S.accounts.map(a => `<option value="${a.id}" ${String(f.account) === String(a.id) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>` : ''}
+      <div class="seg" id="ftype">${[['', 'Alles'], ['out', 'Uit'], ['in', 'In']].map(([v, l]) => `<button data-v="${v}" class="${(f.type || '') === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="seg" id="fscope"><button data-v="month" class="${!showAll ? 'on' : ''}">${esc(monthName(S.month || ''))}</button><button data-v="all" class="${showAll ? 'on' : ''}">Alle maanden</button></div>
+      <label class="row small"><input type="checkbox" id="frev" ${f.status === 'review' ? 'checked' : ''}> Alleen te beoordelen</label>
+      ${f.merchant ? `<span class="chip" style="--c:#0a84ff">Tegenpartij: ${esc(f.merchant)} <a href="#" id="clrm">✕</a></span>` : ''}
+    </div>
+    <div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr>
+      <th style="width:30px"><input type="checkbox" id="selall"></th>
+      <th class="sortable" data-sort="date">Datum</th><th class="sortable" data-sort="payee">Tegenpartij</th><th>Categorie</th><th class="sortable num" data-sort="amount">Bedrag</th></tr></thead>
+      <tbody id="rows"></tbody></table></div><div class="row between" style="padding:10px 16px;border-top:1px solid var(--line)"><span class="muted small" id="summary"></span><button class="btn sm" id="more" hidden>Meer laden</button></div></div>
+    <div id="bulk"></div>`);
+  const query = off => {
+    const p = new URLSearchParams({ sort: f.sort, dir: f.dir, offset: off, limit: 300 });
+    if (!showAll) p.set('month', S.month); if (f.month && !f.all) p.set('month', f.month);
+    for (const k of ['q', 'category', 'account', 'type', 'status', 'merchant']) if (f[k]) p.set(k, f[k]);
+    return p.toString();
+  };
+  const rowHtml = t => {
+    const c = catById(t.category_id), weak = !t.confirmed && (!t.category_id || t.cat_conf < 0.8);
+    const tag = t.confirmed || t.cat_source === 'manual' ? '' : weak ? `<span class="tag warn" title="${esc(t.cat_reason)}">controleer</span>` : t.cat_source ? `<span class="tag" title="${esc(t.cat_reason)}">${SRC[t.cat_source] || 'auto'}</span>` : '';
+    return `<tr data-id="${t.id}"><td><input type="checkbox" class="sel" ${selected.has(t.id) ? 'checked' : ''}></td><td class="nowrap">${fmtDay(t.date)}</td>
+      <td><div class="tx-name"><a href="#" class="open" style="color:inherit;text-decoration:none">${esc(t.payee)}</a>${t.notes ? ' 📝' : ''}</div><div class="small muted" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description)}</div></td>
+      <td><div class="row" style="flex-wrap:nowrap">${catSelect(t.category_id, { none: '❔ kies…', cls: 'cat-input rowcat' })}${tag}</div></td>
+      <td class="num ${t.amount < 0 ? '' : 'pos'}"><b>${eur(t.amount)}</b></td></tr>`;
+  };
+  const load = guard(async (append) => {
+    const off = append ? loaded : 0, top = $('#main').scrollTop;
+    const r = await GET('/transactions?' + query(off));
+    total = r.total; loaded = off + r.rows.length;
+    $('#rows').insertAdjacentHTML(append ? 'beforeend' : 'afterbegin', r.rows.map(rowHtml).join('')); if (!append) { /* gereset door aanroeper */ }
+    $('#summary').textContent = `${total} transactie${total === 1 ? '' : 's'} · som ${eurSigned(r.sum)}${loaded < total ? ` · ${loaded} getoond` : ''}`;
+    $('#more').hidden = loaded >= total;
+    if (!r.rows.length && !append) $('#rows').innerHTML = `<tr><td colspan="5" class="empty">Geen transacties gevonden</td></tr>`;
+    $('#main').scrollTop = top;
+  });
+  const reload = () => { $('#rows').innerHTML = ''; selected.clear(); bulk(); return load(false); };
+  const bulk = () => {
+    const el = $('#bulk');
+    el.innerHTML = selected.size ? `<div class="bulkbar"><b>${selected.size} geselecteerd</b><span class="spacer"></span>${catSelect(null, { none: 'Categorie kiezen…', attrs: 'id="bulkcat"' })}<button class="btn sm" id="bulkgo">Toepassen</button><button class="btn sm ghost" id="bulkx" style="color:inherit">✕</button></div>` : '';
+    $('#bulkgo')?.addEventListener('click', guard(async () => {
+      const cat = $('#bulkcat').value; if (!cat) return toast('Kies eerst een categorie');
+      const r = await POST('/transactions/bulk', { ids: [...selected], category_id: Number(cat) }); toast(`${r.updated} ingedeeld`); reload();
+    }));
+    $('#bulkx')?.addEventListener('click', () => { selected.clear(); $$('.sel').forEach(c => c.checked = false); $('#selall').checked = false; bulk(); });
+  };
+  const set = (k, v) => { f[k] = v || undefined; if (k !== 'all') delete f.offset; };
+  $('#q').addEventListener('input', debounce(e => { set('q', e.target.value.trim()); V.transactions(); }, 350));
+  $('#fcat').addEventListener('change', e => { set('category', e.target.value); V.transactions(); });
+  $('#facc')?.addEventListener('change', e => { set('account', e.target.value); V.transactions(); });
+  $('#ftype').addEventListener('click', e => { if (e.target.dataset.v !== undefined) { set('type', e.target.dataset.v); V.transactions(); } });
+  $('#fscope').addEventListener('click', e => { if (e.target.dataset.v) { f.all = e.target.dataset.v === 'all'; if (!f.all) { delete f.merchant; delete f.month; } V.transactions(); } });
+  $('#frev').addEventListener('change', e => { set('status', e.target.checked ? 'review' : ''); V.transactions(); });
+  $('#clrm')?.addEventListener('click', e => { e.preventDefault(); delete f.merchant; V.transactions(); });
+  $('#more').addEventListener('click', () => load(true));
+  $$('th.sortable').forEach(th => th.addEventListener('click', () => { f.dir = f.sort === th.dataset.sort && f.dir === 'desc' ? 'asc' : 'desc'; f.sort = th.dataset.sort; V.transactions(); }));
+  $('#selall').addEventListener('change', e => { $$('tr[data-id]').forEach(tr => { const id = +tr.dataset.id; tr.querySelector('.sel').checked = e.target.checked; e.target.checked ? selected.add(id) : selected.delete(id); }); bulk(); });
+  $('#rows').addEventListener('change', guard(async e => {
+    const tr = e.target.closest('tr'); if (!tr) return; const id = +tr.dataset.id;
+    if (e.target.classList.contains('sel')) { e.target.checked ? selected.add(id) : selected.delete(id); return bulk(); }
+    if (e.target.classList.contains('rowcat')) {
+      const r = await PATCH('/transactions/' + id, { category_id: e.target.value ? Number(e.target.value) : null });
+      toast(r.similar ? `Opgeslagen · ${r.similar} vergelijkbare automatisch ingedeeld` : 'Opgeslagen'); await refreshMeta(); reload();
+    }
+  }));
+  $('#rows').addEventListener('click', e => { const a = e.target.closest('a.open'); if (a) { e.preventDefault(); txDetail(+a.closest('tr').dataset.id); } });
+  await load(false);
+  if (f.focusSearch) { $('#q').focus(); delete f.focusSearch; }
+};
+
+async function txDetail(id) {
+  const row = await GET('/transactions/' + id); if (!row) return;
+  const c = catById(row.category_id);
+  const m = modal(`<h3>${esc(row.payee)}</h3>
+    <div class="form">
+      <label>Datum</label><div>${fmtDate(row.date)}</div><label>Bedrag</label><div class="${row.amount < 0 ? '' : 'pos'}"><b>${eur(row.amount)}</b></div>
+      <label>Omschrijving</label><div style="white-space:pre-wrap;word-break:break-word">${esc(row.description) || '<span class="muted">–</span>'}</div>
+      ${row.counter_iban ? `<label>Tegenrekening</label><div>${esc(row.counter_iban)}</div>` : ''}${row.code ? `<label>Rabo-code</label><div>${esc(row.code)}</div>` : ''}
+      <label>Categorie</label><div>${catChip(c)}</div>
+      <label>Waarom?</label><div class="muted">${esc(row.cat_reason || (row.category_id ? '' : 'Geen categorie gevonden'))} ${row.cat_source ? `<span class="tag">${SRC[row.cat_source]}</span>` : ''}</div>
+      <label>Notitie</label><textarea id="note" rows="2" placeholder="Eigen notitie…">${esc(row.notes)}</textarea></div>
+    <div class="foot"><button class="btn danger" id="del">Verwijderen</button><span class="spacer" style="flex:1"></span><button class="btn" id="rule">Regel maken…</button><button class="btn" id="same">Alles van deze partij</button><button class="btn primary" id="save">Opslaan</button></div>`);
+  m.$('#save').onclick = guard(async () => { await PATCH('/transactions/' + id, { notes: m.$('#note').value }); m.close(); toast('Opgeslagen'); V.transactions(); });
+  m.$('#same').onclick = () => { m.close(); S.txFilter = { merchant: row.merchant, all: true }; V.transactions(); };
+  m.$('#rule').onclick = () => { m.close(); ruleModal(null, { field: 'payee', op: 'contains', pattern: row.payee, category_id: row.category_id }); };
+  m.$('#del').onclick = guard(async () => { if (await ask('Transactie verwijderen?', 'Dit kan niet ongedaan worden gemaakt. Bij een nieuwe import komt hij weer terug.', 'Verwijderen', true)) { await DEL('/transactions/' + id); m.close(); toast('Verwijderd'); await refreshMeta(); V.transactions(); } });
+}

@@ -1,8 +1,37 @@
 {
   "name": "mybudgets",
-  "version": "1.0.0",
-  "description": "Eenvoudige, lokale budget-app voor persoonlijk gebruik (Rabobank CSV import)",
+  "productName": "MyBudgets",
+  "version": "2.0.0",
+  "description": "Persoonlijke budget-app voor macOS: Rabobank-import, slimme categorisering, budgetten en inzichten. Alles lokaal.",
+  "author": "MyBudgets",
+  "license": "UNLICENSED",
   "type": "module",
-  "scripts": { "start": "node server.js", "test": "node test.js" },
-  "engines": { "node": ">=22.13" }
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "web": "node src/server.js",
+    "test": "node --no-warnings --test test/*.test.js",
+    "demo-csv": "node samples/generate.js > samples/rabobank-demo.csv",
+    "dist": "electron-builder --mac",
+    "pack": "electron-builder --dir"
+  },
+  "engines": { "node": ">=22.13" },
+  "build": {
+    "appId": "nl.mybudgets.app",
+    "productName": "MyBudgets",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["electron/**", "src/**", "renderer/**", "samples/rabobank-demo.csv", "package.json"],
+    "mac": {
+      "category": "public.app-category.finance",
+      "icon": "build/icon.png",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "identity": null,
+      "hardenedRuntime": false
+    },
+    "dmg": { "title": "MyBudgets", "contents": [{ "x": 140, "y": 190 }, { "x": 400, "y": 190, "type": "link", "path": "/Applications" }] }
+  },
+  "devDependencies": {
+    "electron": "^45.3.1",
+    "electron-builder": "^26.0.0"
+  }
 }

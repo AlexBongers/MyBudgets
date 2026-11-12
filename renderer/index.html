@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'">
+<title>MyBudgets</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="side-top drag"></div>
+    <nav id="nav"></nav>
+    <div class="side-foot" id="sidefoot"></div>
+  </aside>
+  <section class="content">
+    <header class="toolbar drag">
+      <h1 id="title">Dashboard</h1>
+      <div class="spacer"></div>
+      <div class="monthpick nodrag" id="monthpick">
+        <button class="icon-btn" id="prev" aria-label="Vorige maand" title="Vorige maand (⌘[)">‹</button>
+        <button class="monthlabel" id="monthlabel" title="Naar laatste maand met data"></button>
+        <button class="icon-btn" id="next" aria-label="Volgende maand" title="Volgende maand (⌘])">›</button>
+      </div>
+      <button class="btn primary nodrag" id="importbtn">Importeren</button>
+    </header>
+    <main id="main"></main>
+  </section>
+</div>
+<div id="modal-root"></div>
+<div id="toast" role="status"></div>
+<script src="lib.js"></script>
+<script src="charts.js"></script>
+<script src="views-main.js"></script>
+<script src="views-plan.js"></script>
+<script src="views-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
