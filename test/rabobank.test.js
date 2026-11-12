@@ -20,7 +20,7 @@ const csvWithRowAtLine = (line, row) => {
 };
 
 test('parseert het actuele geciteerde Rabobank-formaat met UTF-8 BOM, saldo en volgnummer', () => {
-  const csv = [`﻿${csvLine(fullHeaders)}`,
+  const csv = [`\uFEFF${csvLine(fullHeaders)}`,
     csvLine(fullRow({ 0: iban, 1: 'EUR', 3: '1', 4: '2026-08-01', 6: '-12,34', 7: '987,66', 8: 'NL00RABO0000000002', 9: 'Cafe De Hoek', 13: 'BA', 15: 'REF-1', 19: 'Lunch, "met bon"' })),
     csvLine(fullRow({ 0: iban, 1: 'EUR', 3: '2', 4: '2026-08-02', 6: '+99,01', 9: 'Werkgever', 19: 'Salaris' }))].join('\n');
   const r = parseRabobankCsv(csv);

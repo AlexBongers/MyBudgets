@@ -21,7 +21,7 @@ for (const t of txs) {
 }
 const budgets = ['Categorie,Budget', 'Boodschappen,"€450,00"', 'Uit eten,"€150,00"', 'Benzine,"€120,00"', 'Abonnementen,"€40,00"', 'Winkelen,"€100,00"', 'Huisdieren,"€60,00"'].join('\n');
 const zip = writeZip({
-  [`Export-0001/Uitgaven ${id}_all.csv`]: '﻿' + rows.join('\n'), [`Export-0001/Uitgaven ${id}.csv`]: '﻿' + rows.slice(0, 20).join('\n'),
+  [`Export-0001/Uitgaven ${id}_all.csv`]: '\uFEFF' + rows.join('\n'), [`Export-0001/Uitgaven ${id}.csv`]: '\uFEFF' + rows.slice(0, 20).join('\n'),
   [`Export-0001/Maandbudgetten ${id.replace(/0/g, '1')}.csv`]: budgets, [`Export-0001/Uitgaven/Albert Heijn 9 nov ${id}.md`]: '# Albert Heijn\n\nDatum: 9 november 2026\n',
 });
 writeFileSync(new URL('./notion-demo.zip', import.meta.url), zip);

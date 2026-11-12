@@ -52,7 +52,7 @@ export function displayName(payee) {
       const letters = w.replace(/[^A-Za-z]/g, '');
       if (letters.length <= 3 && !PARTICLES.has(w.toLowerCase())) return w;
       if (i > 0 && PARTICLES.has(w.toLowerCase())) return w.toLowerCase();
-      return w.toLowerCase().replace(/(^|[\-/.(])([a-zà-ÿ])/g, (_, a, b) => a + b.toUpperCase());
+      return w.toLowerCase().replace(/(^|[-/.(])([a-zà-ÿ])/g, (_, a, b) => a + b.toUpperCase());
     }).join(' ');
   }
   return s;

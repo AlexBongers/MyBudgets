@@ -1,6 +1,6 @@
 'use strict';
 const V = {};
-const SRC = { pair: 'overboeking', rule: 'regel', own: 'eigen rekening', memory: 'geleerd', builtin: 'bekend', heur: 'afgeleid', ml: 'suggestie', manual: 'handmatig' };
+const SRC = { split: 'gesplitst', pair: 'overboeking', rule: 'regel', own: 'eigen rekening', memory: 'geleerd', builtin: 'bekend', heur: 'afgeleid', ml: 'suggestie', manual: 'handmatig' };
 
 function emptyHero() {
   return `<div class="hero"><div class="big">🌷</div><h2>Welkom bij MyBudgets</h2>

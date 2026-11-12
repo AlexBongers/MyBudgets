@@ -12,21 +12,22 @@ import { isZip, readZip } from './zip.js';
 import { parseCsvRows, detectSeparator } from './rabobank.js';
 import { fold, merchantKey, displayName, tidyDescription } from './normalize.js';
 import { withTx, applyManual, recategorize } from './db.js';
+import { dayNum, addDays } from './util.js';
 
 // ---------------------------------------------------------------- tabellen lezen
 const stripNotionId = n => n.replace(/_all$/i, '').replace(/\s+[0-9a-f]{32}$/i, '').replace(/\s+[0-9a-f]{32}(?=\.)/i, '');
 const decodeText = buf => {
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^﻿/, ''); }
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^\uFEFF/, ''); }
   catch { return new TextDecoder('windows-1252').decode(buf); }
 };
 
 export function csvToTable(text, name) {
-  text = text.replace(/^﻿/, '');
+  text = text.replace(/^\uFEFF/, '');
   if (!text.trim()) return null;
   let sep = ','; try { sep = detectSeparator(text); } catch { /* één kolom: geen scheidingsteken */ }
   const rows = parseCsvRows(text, sep).rows.map(r => r.fields).filter(r => r.some(c => c.trim()));
   if (rows.length < 2) return null;
-  const headers = rows[0].map((h, i) => h.replace(/^﻿/, '').trim() || `Kolom ${i + 1}`);
+  const headers = rows[0].map((h, i) => h.replace(/^\uFEFF/, '').trim() || `Kolom ${i + 1}`);
   const data = rows.slice(1).map(r => headers.map((_, i) => (r[i] ?? '').trim()));
   return { name, headers, rows: data };
 }
@@ -105,7 +106,7 @@ export function parseLooseMoney(value, dec = ',') {
   let neg = false;
   s = s.replace(/[−–—]/g, '-');
   if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
-  s = s.replace(/[€$£]|EUR|euro/gi, '').replace(/[\s  ']/g, '');
+  s = s.replace(/[€$£]|EUR|euro/gi, '').replace(/[\s\u00a0\u202f']/g, '');
   if (s.endsWith('-')) { neg = !neg; s = s.slice(0, -1); }
   if (s.startsWith('-')) { neg = !neg; s = s.slice(1); } else if (s.startsWith('+')) s = s.slice(1);
   if (!/^\d[\d.,]*$/.test(s) && !/^[.,]\d+$/.test(s)) return null;
@@ -274,9 +275,9 @@ export function buildPlan(db, table, cfg) {
     }
     const category = firstOf(cell(r, 'category'));
     if (ci.amount >= 0) {
-      const t = typeCol ? resolveType(cell(r, 'type')) : 0;
+      const t = typeCol ? resolveType(cell(r, 'type')) : 0; // -1 uitgave, 1 inkomst, 0 onbekend
       if (sign === 'by-type' || (sign === 'auto' && t !== 0 && !anyNegative)) { if (t) amount = t * Math.abs(amount); }
-      else if (sign === 'expenses-positive' || (sign === 'auto' && !anyNegative && !typeCol)) amount = INCOME_NAME.test(category) ? Math.abs(amount) : -Math.abs(amount);
+      else if (sign === 'expenses-positive' || (sign === 'auto' && !anyNegative && (!typeCol || t === 0))) amount = INCOME_NAME.test(category) ? Math.abs(amount) : -Math.abs(amount);
       else if (sign === 'invert') amount = -amount;
     }
     if (amount === 0) { errors.push({ row: line, reason: 'Bedrag is 0' }); return; }
@@ -307,7 +308,7 @@ export function buildPlan(db, table, cfg) {
   // bestaande (bijv. Rabobank-)transacties verrijken: zelfde bedrag, datum ±3 dagen, één-op-één
   const existing = [];
   if (cfg.enrich !== false && rows.length) {
-    const dates = rows.map(x => x.date).sort(), from = shiftDay(dates[0], -3), to = shiftDay(dates.at(-1), 3);
+    const dates = rows.map(x => x.date).sort(), from = addDays(dates[0], -3), to = addDays(dates.at(-1), 3);
     for (const t of db.prepare(`SELECT id, date, amount, account_id, payee, description, category_id, confirmed, notes FROM transactions WHERE date>=? AND date<=? AND key NOT LIKE 'notion|%'`).all(from, to)) existing.push(t);
     const byAmount = new Map(); for (const t of existing) (byAmount.get(t.amount) || byAmount.set(t.amount, []).get(t.amount)).push(t);
     const cands = [];
@@ -350,8 +351,6 @@ export function buildPlan(db, table, cfg) {
   return { summary, rows, errors, categoryPlan, preview: rows.slice(0, 12).map(x => ({ line: x.line, date: x.date, amount: x.amount, payee: x.payee, description: x.description, category: x.category, account: x.account,
     status: x.already ? 'bestaat al' : x.match ? 'verrijkt bestaande' : 'nieuw' })) };
 }
-const dayNum = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
-const shiftDay = (d, n) => new Date((dayNum(d) + n) * 864e5).toISOString().slice(0, 10);
 const words = s => new Set(fold(s).split(/[^a-z0-9]+/).filter(w => w.length > 2));
 function similarity(a, b) { const A = words(a), B = words(b); if (!A.size || !B.size) return 0; let n = 0; for (const w of A) if (B.has(w)) n++; return n / Math.min(A.size, B.size); }
 

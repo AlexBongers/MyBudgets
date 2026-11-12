@@ -12,13 +12,13 @@
 // transactie "te beoordelen"; de gebruiker bevestigt of corrigeert, en het systeem leert.
 import { clean, fold, merchantKey, tokensOf } from './normalize.js';
 import { MERCHANTS } from './merchants.js';
+import { normIban } from './util.js';
 
 export const AUTO_THRESHOLD = 0.8;
-const normIban = s => String(s || '').replace(/\s+/g, '').toUpperCase();
 // Merknamen die ook gewone woorden of bedrijfsnamen zijn: alleen automatisch bij pin-, iDEAL- of incassobetalingen
 const AMBIGUOUS_BRANDS = new Set(['plus', 'spar', 'coop', 'action', 'deen', 'ns', 'bp', 'simpel']);
 const PIN_LIKE = new Set(['ba', 'bc', 'id', 'ei', 'cc', 'ga']);
-const NO_IBAN_MEMORY = new Set(['id', 'ba', 'bc', 'ga', 'cc']); // iDEAL/pin: IBAN zegt niets over de winkel
+export const NO_IBAN_MEMORY = new Set(['id', 'ba', 'bc', 'ga', 'cc']); // iDEAL/pin: IBAN zegt niets over de winkel
 
 export function prepare(tx) {
   return { ...tx, merchant: tx.merchant || merchantKey(tx.payee, tx.description) };

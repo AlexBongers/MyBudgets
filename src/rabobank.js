@@ -42,7 +42,7 @@ const normalizeHeader = v => v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerC
 export function parseRabobankCsv(input, options = {}) {
   const decoded = decodeCsv(input);
   const warnings = [...decoded.warnings];
-  const text = decoded.text.replace(/^﻿/, '');
+  const text = decoded.text.replace(/^\uFEFF/, '');
   const separator = detectSeparator(text);
   const parsedCsv = parseCsvRows(text, separator);
   warnings.push(...parsedCsv.warnings);
@@ -124,7 +124,7 @@ export function parseRabobank(input, options) {
 function decodeCsv(input) {
   if (typeof input === 'string') {
     if (input.includes('�')) throw new Error('De tekst bevat ongeldige tekens (�). Lees het originele bestand in zodat de codering goed herkend kan worden.');
-    return { text: input, encoding: input.startsWith('﻿') ? 'utf8-bom' : 'utf8', warnings: [] };
+    return { text: input, encoding: input.startsWith('\uFEFF') ? 'utf8-bom' : 'utf8', warnings: [] };
   }
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   const bom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
@@ -210,7 +210,7 @@ export function parseDate(value) {
 }
 
 export function parseAmount(value) {
-  let n = String(value).trim().replace(/[€$£]/g, '').replace(/[\s ]/g, '');
+  let n = String(value).trim().replace(/[€$£]/g, '').replace(/[\s\u00a0]/g, '');
   const paren = n.startsWith('(') && n.endsWith(')');
   if (paren) n = n.slice(1, -1);
   const negative = n.startsWith('-') || paren;

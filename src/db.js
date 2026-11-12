@@ -1,11 +1,15 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { Categorizer, AUTO_THRESHOLD } from './categorizer.js';
+import { Categorizer, AUTO_THRESHOLD, NO_IBAN_MEMORY } from './categorizer.js';
+import { normIban } from './util.js';
 import { merchantKey, displayName, tokensOf, tidyDescription } from './normalize.js';
 
 export { AUTO_THRESHOLD };
-export const SCHEMA_VERSION = 2;
+
+/** Voer fn uit in één SQLite-transactie (alles of niets). Niet nesten. */
+export const withTx = (db, fn) => { db.exec('BEGIN'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
+export const SCHEMA_VERSION = 2; // let op: kolommen worden idempotent toegevoegd in migrate()
 
 export function openDb(path = 'data/budget.db') {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
@@ -142,9 +146,7 @@ export const DEFAULT_CATEGORIES = [
 
 function seedCategories(db) {
   const ins = db.prepare('INSERT INTO categories (key, name, kind, grp, icon, color) VALUES (?,?,?,?,?,?)');
-  db.exec('BEGIN');
-  for (const [key, name, kind, grp, icon, color] of DEFAULT_CATEGORIES) ins.run(key, name, kind, grp, icon, color);
-  db.exec('COMMIT');
+  withTx(db, () => { for (const [key, name, kind, grp, icon, color] of DEFAULT_CATEGORIES) ins.run(key, name, kind, grp, icon, color); });
 }
 
 // ---------- categorizer laden ----------
@@ -161,8 +163,6 @@ export function loadCategorizer(db) {
     HAVING COUNT(DISTINCT ym) >= 3 AND AVG(amount) >= 40000 AND MIN(amount) >= AVG(amount) * 0.7 AND MAX(amount) <= AVG(amount) * 1.3`).all().map(r => r.merchant);
   return new Categorizer({ categories, rules, memory, ownIbans, training, recurringIncome });
 }
-
-export const withTx = (db, fn) => { db.exec('BEGIN'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
 
 // ---------- importeren ----------
 export function importTransactions(db, parsed, meta = {}) {
@@ -254,7 +254,7 @@ function learn(db, t, categoryId) {
       ON CONFLICT(key, category_id) DO UPDATE SET n = n + 1, label = excluded.label`).run(key, categoryId, label);
   };
   if (t.merchant) bump('m:' + t.merchant, t.payee);
-  if (t.counter_iban && !['id', 'ba', 'bc', 'ga', 'cc'].includes(t.code)) bump('i:' + t.counter_iban.toUpperCase(), t.payee);
+  if (t.counter_iban && !NO_IBAN_MEMORY.has(String(t.code || '').toLowerCase())) bump('i:' + normIban(t.counter_iban), t.payee);
 }
 
 // ids krijgen handmatig een categorie (of null = wissen). Geeft aantal gewijzigde rijen.
@@ -304,17 +304,22 @@ export function snapshot(db, ids) {
   const get = db.prepare('SELECT id, category_id, cat_source, cat_conf, cat_reason, confirmed, merchant, counter_iban FROM transactions WHERE id=?');
   const rows = ids.map(id => get.get(id)).filter(Boolean);
   const keys = new Set();
-  for (const r of rows) { if (r.merchant) keys.add('m:' + r.merchant); if (r.counter_iban) keys.add('i:' + r.counter_iban.toUpperCase()); }
+  for (const r of rows) { if (r.merchant) keys.add('m:' + r.merchant); if (r.counter_iban) keys.add('i:' + normIban(r.counter_iban)); }
   const mem = db.prepare('SELECT key, category_id, n, label FROM memory WHERE key=?');
   return { rows, keys: [...keys], memory: [...keys].flatMap(k => mem.all(k)) };
 }
 export function restore(db, snap) {
   return withTx(db, () => {
+    // Een categorie kan sinds de snapshot verwijderd zijn: dan valt de transactie terug naar 'te beoordelen'
+    const exists = db.prepare('SELECT 1 FROM categories WHERE id=?'), alive = id => id != null && !!exists.get(id);
     const up = db.prepare('UPDATE transactions SET category_id=?, cat_source=?, cat_conf=?, cat_reason=?, confirmed=? WHERE id=?');
-    for (const r of snap.rows) up.run(r.category_id, r.cat_source, r.cat_conf, r.cat_reason, r.confirmed, r.id);
+    for (const r of snap.rows) {
+      if (r.category_id == null || alive(r.category_id)) up.run(r.category_id, r.cat_source, r.cat_conf, r.cat_reason, r.confirmed, r.id);
+      else up.run(null, null, 0, '', 0, r.id);
+    }
     const del = db.prepare('DELETE FROM memory WHERE key=?'), ins = db.prepare('INSERT INTO memory (key, category_id, n, label) VALUES (?,?,?,?)');
     for (const k of snap.keys) del.run(k);
-    for (const m of snap.memory) ins.run(m.key, m.category_id, m.n, m.label);
+    for (const m of snap.memory) if (alive(m.category_id)) ins.run(m.key, m.category_id, m.n, m.label);
     return recategorize(db);
   });
 }
@@ -326,6 +331,9 @@ export function backupTo(db, path) {
   return path;
 }
 
+// Alle gegevens wissen behalve categorieën, regels en spaardoelen; in één transactie, dus alles of niets.
 export function resetAll(db) {
-  db.exec('DELETE FROM splits; DELETE FROM transactions; DELETE FROM imports; DELETE FROM memory; DELETE FROM budgets; DELETE FROM accounts;');
+  withTx(db, () => {
+    for (const t of ['splits', 'transactions', 'imports', 'memory', 'budgets', 'accounts', 'ignored_recurring']) db.exec(`DELETE FROM ${t}`);
+  });
 }

@@ -1,7 +1,6 @@
 // Detectie van terugkerende betalingen (abonnementen, vaste lasten).
-const day = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
+import { dayNum as day, addDays } from './util.js';
 const median = a => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
-const addDays = (d, n) => new Date((day(d) + Math.round(n)) * 864e5).toISOString().slice(0, 10);
 
 const FREQS = [
   { name: 'wekelijks', lo: 6, hi: 8, tol: 1.5, min: 4, perMonth: 30.44 / 7, amt: 0.2 },

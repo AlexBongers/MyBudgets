@@ -10,7 +10,7 @@ Vereist [Node.js](https://nodejs.org) ≥ 22.13 (aanbevolen: LTS).
 ```bash
 npm install
 npm start          # opent de app
-npm test           # parser, categoriseermodule, corpus, service, server (63 tests)
+npm test           # parser, categoriseermodule, corpus, service, server (72 tests)
 npm run e2e        # doorloopt de echte app (17 controles, tijdelijke database)
 npm run dist       # bouwt dist/MyBudgets-*.dmg (Apple Silicon + Intel)
 ```
@@ -102,7 +102,8 @@ Sneltoetsen: ⌘O importeren · ⌘K zoeken/navigeren · ⌘1–7 schermen · �
 
 ```
 electron/   hoofdproces (venster, menu, IPC, bestandsdialogen) + preload
-src/        rabobank (parser), normalize, merchants, categorizer, db (schema/migraties), recurring, service (API), server (dev)
+src/        rabobank (parser), normalize, merchants, categorizer, db (schema/migraties/schrijven), reports (leesmodel),
+            service (API-routes), recurring, notion + notion-api + zip (Notion-import), util (gedeelde helpers), server (dev)
 renderer/   interface (vanilla JS/SVG, geen dependencies)
 samples/    generate.js en rabobank-demo.csv (fictieve data)
 scripts/    bench.js
