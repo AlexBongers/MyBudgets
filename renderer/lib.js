@@ -108,3 +108,8 @@ function deltaChip(cur, prev, higherIsBad) {
   const bad = higherIsBad ? d > 0 : d < 0;
   return `<span class="delta ${d > 0 ? 'up' : 'down'}-${bad ? 'bad' : 'good'}">${d > 0 ? '▲' : '▼'} ${p}%</span>`;
 }
+
+// Eén actieve toetsenbordhandler per scherm; go() ruimt hem op bij het wisselen van scherm.
+let activeKeyHandler = null;
+function setKeyHandler(fn) { clearKeyHandler(); activeKeyHandler = fn; document.addEventListener("keydown", fn); }
+function clearKeyHandler() { if (activeKeyHandler) document.removeEventListener("keydown", activeKeyHandler); activeKeyHandler = null; }

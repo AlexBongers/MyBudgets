@@ -78,3 +78,21 @@ function monthBars(monthly, color = 'var(--accent)') {
   if (avg > 0) s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(avg)}" y2="${y(avg)}" stroke="var(--warn)" stroke-dasharray="5 4"/><text x="${W - pad.r}" y="${y(avg) - 4}" text-anchor="end" style="fill:var(--warn)">gem. ${eur0(avg)}</text>`;
   return s + '</svg>';
 }
+
+// Lijn met vlak eronder, voor saldo-verloop. points: [{date, balance}] (op volgorde, ongelijke tussenpozen).
+function areaChart(points) {
+  const W = 680, H = 210, pad = { l: 46, r: 8, t: 10, b: 22 };
+  const t0 = Date.parse(points[0].date), t1 = Date.parse(points.at(-1).date) || t0 + 1;
+  let lo = Math.min(...points.map(p => p.balance)), hi = Math.max(...points.map(p => p.balance));
+  const span = Math.max(1, hi - lo); lo -= span * 0.08; hi += span * 0.08;
+  const x = d => pad.l + (W - pad.l - pad.r) * ((Date.parse(d) - t0) / Math.max(1, t1 - t0)), y = v => pad.t + (H - pad.t - pad.b) * (1 - (v - lo) / (hi - lo));
+  const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(p.date).toFixed(1)} ${y(p.balance).toFixed(1)}`).join('');
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Saldo-verloop">`;
+  for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4; s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${axisEur(v)}</text>`; }
+  const seen = new Set();
+  points.forEach(p => { const mo = p.date.slice(0, 7); if (!seen.has(mo) && p.date.slice(8) <= '10') { seen.add(mo); s += `<text x="${x(p.date)}" y="${H - 5}" text-anchor="middle">${monthShort(mo)}</text>`; } });
+  s += `<path d="${line}L${x(points.at(-1).date).toFixed(1)} ${y(lo)}L${x(points[0].date).toFixed(1)} ${y(lo)}Z" fill="var(--accent-soft)"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>`;
+  points.forEach(p => { s += `<circle cx="${x(p.date).toFixed(1)}" cy="${y(p.balance).toFixed(1)}" r="6" fill="transparent"><title>${fmtDate(p.date)}: ${eur(p.balance)}</title></circle>`; });
+  const last = points.at(-1); s += `<circle cx="${x(last.date)}" cy="${y(last.balance)}" r="4" fill="var(--accent)"/>`;
+  return s + '</svg>';
+}

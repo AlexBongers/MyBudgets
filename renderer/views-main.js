@@ -38,8 +38,14 @@ V.dashboard = async () => {
     </div>
     <div class="grid g2">
       <div class="card"><h2>Budget <span class="right"><a href="#" data-go="budget">Aanpassen</a></span></h2>${d.budget.some(b => b.budget > 0) ? d.budget.filter(b => b.budget > 0).sort((a, b) => (b.spent / (b.budget || 1)) - (a.spent / (a.budget || 1))).slice(0, 8).map(b => `<div style="margin-bottom:11px"><div class="row between small"><span>${b.icon} ${esc(b.name)}</span><span class="muted">${eur0(b.spent)} / ${eur0(b.budget)}</span></div>${progressBar(b.spent, b.budget)}</div>`).join('') : '<div class="empty">Nog geen budget ingesteld.<br><button class="btn sm" data-go="budget" style="margin-top:8px">Budget instellen</button></div>'}</div>
-      <div class="card"><h2>Top tegenpartijen</h2>${d.topPayees.length ? `<table>${d.topPayees.map(x => `<tr data-payee="${esc(x.merchant)}" style="cursor:default"><td>${x.icon} ${esc(x.payee)}</td><td class="muted small">${x.n}×</td><td class="num"><b>${eur(x.value)}</b></td></tr>`).join('')}</table>` : '<div class="empty">Geen data</div>'}</div>
-    </div>`);
+      <div class="card"><h2>Top tegenpartijen</h2>${d.topPayees.length ? `<table>${d.topPayees.slice(0, 6).map(x => `<tr data-payee="${esc(x.merchant)}" style="cursor:default"><td>${x.icon} ${esc(x.payee)}</td><td class="muted small">${x.n}×</td><td class="num"><b>${eur(x.value)}</b></td></tr>`).join('')}</table>` : '<div class="empty">Geen data</div>'}</div>
+    </div>
+    <div class="grid g21" style="margin-top:16px">
+      <div class="card"><h2>Saldo-verloop <span class="right muted">alle rekeningen</span></h2>${d.balanceHistory.length > 1 ? areaChart(d.balanceHistory) : '<div class="empty">Het saldo-verloop verschijnt zodra je CSV de kolom “Saldo na trn” bevat.</div>'}</div>
+      <div class="card"><h2>Binnenkort verwacht <span class="right muted">30 dagen</span></h2>${d.upcoming.length ? `<table>${d.upcoming.slice(0, 7).map(u => `<tr data-payee="${esc(u.merchant)}"><td class="nowrap muted small">${fmtDay(u.next)}</td><td>${esc(u.name)}</td><td class="num">${u.variable ? '~' : ''}${eur0(u.amount)}</td></tr>`).join('')}${d.upcoming.length > 7 ? `<tr><td></td><td class="muted small">+ ${d.upcoming.length - 7} meer</td><td></td></tr>` : ''}<tr><td></td><td><b>Totaal</b></td><td class="num"><b>${eur0(d.upcoming.reduce((a, u) => a + u.amount, 0))}</b></td></tr></table>` : '<div class="empty">Geen vaste lasten verwacht</div>'}</div>
+    </div>
+    <div id="goalsbox" style="margin-top:16px"></div>`);
+  renderGoals();
   m.querySelectorAll('[data-go]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); go(a.dataset.go); }));
   m.querySelectorAll('[data-month]').forEach(g => g.addEventListener('click', () => { S.month = g.dataset.month; go('dashboard'); }));
   m.querySelectorAll('[data-cat]').forEach(el => el.addEventListener('click', () => openCategory(el.dataset.cat ? +el.dataset.cat : null)));
@@ -60,6 +66,7 @@ V.review = async () => {
   const m = render(`
     <div class="row between" style="margin-bottom:14px"><div><b>${groups.length}</b> tegenpartijen · <b>${S.review}</b> transacties <span class="muted">— deel in per tegenpartij; MyBudgets leert van je keuzes.</span></div>
       ${withSug.length ? `<button class="btn" id="acceptall">✓ Bevestig alle suggesties (${withSug.reduce((a, g) => a + g.count, 0)})</button>` : ''}</div>
+    <div class="muted small" style="margin:-4px 0 12px">⌨️ <kbd>j</kbd>/<kbd>k</kbd> bladeren · <kbd>Enter</kbd> suggestie bevestigen · <kbd>c</kbd> andere categorie · <kbd>r</kbd> regel maken · <kbd>v</kbd> transacties tonen</div>
     <div class="stack" id="rvlist">${groups.map(g => {
       const sug = g.suggestions.slice(0, 2);
       return `<div class="card rv" data-merchant="${esc(g.merchant)}" data-ids="${g.ids.join(',')}">
@@ -68,7 +75,7 @@ V.review = async () => {
           ${sug.length ? `<div class="small faint">${esc(sug[0].reason || '')}</div>` : '<div class="small faint">Geen suggestie — kies een categorie</div>'}</div>
         <div class="rv-actions">${sug.map((s, i) => { const c = catById(s.category_id); return c ? `<button class="btn sm ${i ? '' : 'primary'}" data-accept="${c.id}" title="${esc(s.reason || '')}">${c.icon} ${esc(c.name)}${i ? '' : ' ✓'}</button>` : ''; }).join('')}
           ${catSelect(null, { none: 'Andere categorie…', attrs: 'data-pick' })}
-          <button class="btn sm ghost" data-view title="Transacties tonen">↗</button></div></div>`;
+          <button class="btn sm ghost" data-rule title="Regel maken (r)">⚙︎</button><button class="btn sm ghost" data-view title="Transacties tonen (v)">↗</button></div></div>`;
     }).join('')}</div>`);
   const assign = guard(async (card, catId) => {
     const ids = card.dataset.ids.split(',').map(Number);
@@ -80,7 +87,23 @@ V.review = async () => {
     card.querySelectorAll('[data-accept]').forEach(b => b.addEventListener('click', () => assign(card, b.dataset.accept)));
     card.querySelector('[data-pick]').addEventListener('change', e => e.target.value && assign(card, e.target.value));
     card.querySelector('[data-view]').addEventListener('click', () => { S.txFilter = { merchant: card.dataset.merchant, all: true }; go('transactions'); });
+    card.querySelector('[data-rule]').addEventListener('click', () => { const g = groups.find(x => x.merchant === card.dataset.merchant); ruleModal(null, { field: 'payee', op: 'contains', pattern: g.name, category_id: g.suggestions[0]?.category_id || null }); });
   });
+  // Toetsenbord: j/k bladeren, Enter bevestigt de suggestie, c kiest zelf, r maakt een regel
+  const cards = $$('.rv'); let cur = 0;
+  const focusCard = i => { cur = Math.max(0, Math.min(cards.length - 1, i)); cards.forEach((c, n) => { c.style.outline = n === cur ? '2px solid var(--accent)' : ''; }); cards[cur]?.scrollIntoView({ block: 'nearest' }); };
+  setKeyHandler(e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.matches('input,textarea') || document.querySelector('.overlay')) return;
+    const card = cards[cur]; if (!card) return;
+    if (e.target.matches('select')) { if (e.key === 'Escape') e.target.blur(); return; }
+    if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); focusCard(cur + 1); }
+    else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); focusCard(cur - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); card.querySelector('[data-accept]')?.click(); }
+    else if (e.key === 'c') { e.preventDefault(); card.querySelector('[data-pick]').focus(); }
+    else if (e.key === 'r') { e.preventDefault(); card.querySelector('[data-rule]').click(); }
+    else if (e.key === 'v') { e.preventDefault(); card.querySelector('[data-view]').click(); }
+  });
+  focusCard(0);
   $('#acceptall')?.addEventListener('click', guard(async () => {
     if (!(await ask('Alle suggesties bevestigen?', `Je bevestigt de voorgestelde categorie voor ${withSug.length} tegenpartijen. Je kunt dit later altijd nog aanpassen.`, 'Bevestigen'))) return;
     const r = await POST('/transactions/confirm', { ids: withSug.flatMap(g => g.ids) }); toast(`${r.confirmed} bevestigd`, r.undo); V.review();
@@ -216,4 +239,41 @@ async function splitModal(id) {
   });
   m.$('#unsplit')?.addEventListener('click', guard(async () => { await DEL('/transactions/' + id + '/split'); m.close(); await refreshMeta(); toast('Splitsing opgeheven'); go(S.tab); }));
   draw();
+}
+
+// ---------- spaardoelen ----------
+async function renderGoals() {
+  const box = $('#goalsbox'); if (!box) return;
+  const goals = await GET('/goals');
+  box.innerHTML = `<div class="card"><h2>Spaardoelen <span class="right"><a href="#" id="addgoal">+ Doel toevoegen</a></span></h2>${goals.length ? `<div class="grid g4">${goals.map(g => {
+    const left = Math.max(0, g.target - g.saved), months = g.monthly > 0 && left > 0 ? Math.ceil(left / g.monthly) : null;
+    const eta = months ? new Date(Date.now() + months * 30.44 * 864e5).toLocaleDateString('nl-NL', { month: 'short', year: 'numeric' }) : null;
+    return `<div class="card" style="box-shadow:none;background:var(--hover)" data-goal="${g.id}"><div class="row between"><b>${esc(g.icon)} ${esc(g.name)}</b><button class="btn sm ghost" data-edit title="Wijzigen">⋯</button></div>
+      <div class="kpi"><div class="v" style="font-size:20px">${eur0(g.saved)}</div><div class="sub">van ${eur0(g.target)} · ${pct(g.saved, g.target)}%</div></div>
+      <div style="margin:8px 0">${progressBar(g.saved, g.target).replace('var(--good)', 'var(--accent)')}</div>
+      <div class="small muted">${left === 0 ? '🎉 Doel bereikt!' : eta ? `Nog ${eur0(left)} · bij ${eur0(g.monthly)}/mnd klaar in ${eta}` : `Nog ${eur0(left)}`}</div>
+      ${left > 0 ? `<button class="btn sm" style="margin-top:8px" data-add>+ Bijstorten</button>` : ''}</div>`; }).join('')}</div>` : '<div class="empty">Spaar je ergens voor? Stel een doel in en volg je voortgang.</div>'}</div>`;
+  $('#addgoal').onclick = e => { e.preventDefault(); goalModal(); };
+  box.querySelectorAll('[data-goal]').forEach(el => {
+    const g = goals.find(x => x.id === +el.dataset.goal);
+    el.querySelector('[data-edit]').onclick = () => goalModal(g);
+    el.querySelector('[data-add]')?.addEventListener('click', () => {
+      const mm = modal(`<h3>Bijstorten op “${esc(g.name)}”</h3><div class="form"><label>Bedrag (€)</label><input id="ga" type="number" min="0" step="0.01" placeholder="0,00"></div><div class="foot"><button class="btn" data-close>Annuleren</button><button class="btn primary" id="go">Bijstorten</button></div>`);
+      mm.$('#go').onclick = guard(async () => { const v = Math.round(Number(mm.$('#ga').value) * 100); if (!(v > 0)) return toast('Vul een bedrag in'); await PUT('/goals/' + g.id, { saved: g.saved + v }); mm.close(); toast('Bijgestort'); renderGoals(); });
+    });
+  });
+}
+function goalModal(g) {
+  const m = modal(`<h3>${g ? 'Doel wijzigen' : 'Nieuw spaardoel'}</h3><div class="form">
+    <label>Naam</label><div class="row" style="flex-wrap:nowrap"><input id="gi" value="${esc(g?.icon || '🎯')}" style="width:52px;text-align:center"><input id="gn" value="${esc(g?.name || '')}" placeholder="bijv. Vakantie" style="flex:1"></div>
+    <label>Streefbedrag (€)</label><input id="gt" type="number" min="1" step="1" value="${g ? g.target / 100 : ''}">
+    <label>Al gespaard (€)</label><input id="gs" type="number" min="0" step="1" value="${g ? g.saved / 100 : 0}">
+    <label>Per maand (€)</label><input id="gm" type="number" min="0" step="1" value="${g ? g.monthly / 100 : ''}" placeholder="optioneel"></div>
+    <div class="foot">${g ? '<button class="btn danger" id="gd">Verwijderen</button><span style="flex:1"></span>' : ''}<button class="btn" data-close>Annuleren</button><button class="btn primary" id="gsave">Opslaan</button></div>`);
+  m.$('#gsave').onclick = guard(async () => {
+    const body = { name: m.$('#gn').value, icon: m.$('#gi').value || '🎯', target: Math.round(m.$('#gt').value * 100), saved: Math.round(m.$('#gs').value * 100), monthly: Math.round(m.$('#gm').value * 100) };
+    if (g) await PUT('/goals/' + g.id, body); else await POST('/goals', body);
+    m.close(); renderGoals();
+  });
+  m.$('#gd')?.addEventListener('click', guard(async () => { if (await ask('Doel verwijderen?', 'Dit kan niet ongedaan worden gemaakt.', 'Verwijderen', true)) { await DEL('/goals/' + g.id); m.close(); renderGoals(); } }));
 }

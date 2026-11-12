@@ -202,3 +202,31 @@ test('alle leesroutes werken op demodata (smoke)', async () => {
   const d = await api('GET', '/api/dashboard?month=2026-10');
   assert.equal(d.totals.income, 315000); assert.ok(d.review > 0); assert.equal(d.byCategory[0].name, 'Huur / hypotheek');
 });
+
+test('regelsuggesties: pas na 3 consistente keuzes, niet als er al een regel is', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:'); const api = createApi(db);
+  importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  assert.equal((await api('GET', '/api/rules/suggest')).length, 0);
+  const ids = db.prepare("SELECT id FROM transactions WHERE merchant='dierenspeciaalzaak kat'").all().map(r => r.id);
+  for (const i of ids.slice(0, 3)) await api('PATCH', '/api/transactions/' + i, { category_id: id('shopping') });
+  const s = await api('GET', '/api/rules/suggest');
+  assert.equal(s.length, 1); assert.equal(s[0].category_id, id('shopping')); assert.ok(s[0].n >= 3);
+  await api('POST', '/api/rules', { field: 'payee', op: 'contains', pattern: 'dierenspeciaalzaak', category_id: id('shopping') });
+  assert.equal((await api('GET', '/api/rules/suggest')).length, 0);
+});
+
+test('saldo-verloop sluit aan op het laatste saldo; doelen CRUD; verwachte vaste lasten', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:'); const api = createApi(db);
+  importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  const d = await api('GET', '/api/dashboard');
+  const acc = (await api('GET', '/api/accounts'))[0];
+  assert.equal(d.balanceHistory.at(-1).balance, acc.balance); assert.ok(d.balanceHistory.length > 20);
+  assert.ok(Array.isArray(d.upcoming));
+  const g = await api('POST', '/api/goals', { name: 'Vakantie', target: 200000, saved: 50000, monthly: 25000 });
+  await api('PUT', '/api/goals/' + g.id, { saved: 75000 });
+  const list = await api('GET', '/api/goals'); assert.equal(list[0].saved, 75000);
+  await assert.rejects(() => api('POST', '/api/goals', { name: '', target: 0 }), /verplicht/);
+  await api('DELETE', '/api/goals/' + g.id); assert.equal((await api('GET', '/api/goals')).length, 0);
+});

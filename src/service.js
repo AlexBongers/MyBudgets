@@ -58,6 +58,28 @@ export function createApi(db, ctx = {}) {
       return { ...a, balance: last?.balance ?? null, balance_date: last?.date ?? null, count: n.c, from: n.f, to: n.t };
     });
   }
+  // Totaalsaldo over de tijd: per rekening het laatste "saldo na transactie" per dag, vooruit gedragen en opgeteld.
+  function balanceHistory(months) {
+    const accs = q('SELECT id FROM accounts');
+    const latest = one('SELECT MAX(date) d FROM transactions').d; if (!latest) return [];
+    const startMonth = addMonths(latest.slice(0, 7), -(months - 1)), from = startMonth + '-01';
+    const perDay = new Map(); // date -> Map(account -> balance)
+    const initial = new Map();
+    for (const a of accs) {
+      const before = one('SELECT balance FROM transactions WHERE account_id=? AND balance IS NOT NULL AND date<? ORDER BY date DESC, seq DESC, id DESC LIMIT 1', a.id, from);
+      if (before) initial.set(a.id, before.balance);
+      for (const r of q('SELECT date, balance FROM transactions WHERE account_id=? AND balance IS NOT NULL AND date>=? ORDER BY date, seq, id', a.id, from)) {
+        if (!perDay.has(r.date)) perDay.set(r.date, new Map());
+        perDay.get(r.date).set(a.id, r.balance);
+      }
+    }
+    const cur = new Map(initial), pts = [];
+    for (const d of [...perDay.keys()].sort()) {
+      for (const [k, v] of perDay.get(d)) cur.set(k, v);
+      pts.push({ date: d, balance: [...cur.values()].reduce((x, y) => x + y, 0) });
+    }
+    return pts;
+  }
   function recurring() {
     const rows = q(`SELECT t.merchant, t.payee, t.date, t.amount, t.category_id FROM transactions t LEFT JOIN categories c ON c.id=t.category_id
       WHERE t.amount<0 AND (c.id IS NULL OR (c.kind='expense' AND COALESCE(c.key,'') NOT IN ('groceries','dining','drugstore','fuel','shopping','cash','transit','leisure'))) AND t.merchant<>'' AND t.date >= date((SELECT MAX(date) FROM transactions), '-18 months')`);
@@ -125,7 +147,11 @@ export function createApi(db, ctx = {}) {
       projection = { expenses: Math.round(paidSum + remaining + (totals.expenses - paidSum) / dom * dim) };
     }
     const recurringMonthly = rec.reduce((a, r) => a + r.monthly, 0);
+    const horizon = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+    const upcoming = rec.filter(r => r.next >= today && r.next <= horizon).sort((a, b) => a.next.localeCompare(b.next))
+      .map(r => ({ name: r.name, merchant: r.merchant, next: r.next, amount: r.amount, variable: r.variable, category_id: r.category_id }));
     const d = {
+      upcoming, balanceHistory: balanceHistory(12),
       month: m, totals, prevTotals, byCategory, trend, topPayees, budget, cumul, projection, recurringMonthly,
       review: one(`SELECT COUNT(*) c FROM transactions t WHERE ${REVIEW}`).c,
       months: q('SELECT DISTINCT substr(date,1,7) m FROM transactions ORDER BY m DESC').map(r => r.m),
@@ -346,6 +372,25 @@ export function createApi(db, ctx = {}) {
       return { count: n, samples: hits };
     },
 
+    // Regelsuggesties: tegenpartijen die je ≥3× consequent hetzelfde hebt ingedeeld en waar nog geen regel voor bestaat
+    'GET /api/rules/suggest': () => {
+      const have = q('SELECT pattern FROM rules WHERE enabled=1').map(r => r.pattern.toLowerCase());
+      return q(`SELECT m.key, m.label, m.n, m.category_id, c.name category, c.icon FROM memory m JOIN categories c ON c.id=m.category_id
+        WHERE m.key LIKE 'm:%' AND m.n>=3 AND m.label<>'' AND (SELECT COUNT(*) FROM memory x WHERE x.key=m.key)=1 ORDER BY m.n DESC LIMIT 30`)
+        .filter(r => !have.some(p => p && r.label.toLowerCase().includes(p))).slice(0, 8);
+    },
+    'GET /api/goals': () => q('SELECT * FROM goals ORDER BY id'),
+    'POST /api/goals': b => {
+      if (!String(b.name || '').trim() || !(Number(b.target) > 0)) throw httpErr(400, 'Naam en streefbedrag zijn verplicht');
+      const r = run('INSERT INTO goals (name, icon, target, saved, monthly) VALUES (?,?,?,?,?)', String(b.name).trim(), b.icon || '🎯', Math.round(b.target), Math.max(0, Math.round(b.saved || 0)), Math.max(0, Math.round(b.monthly || 0)));
+      return { id: Number(r.lastInsertRowid) };
+    },
+    'PUT /api/goals/:id': (b, { id }) => {
+      run('UPDATE goals SET name=COALESCE(?,name), icon=COALESCE(?,icon), target=COALESCE(?,target), saved=COALESCE(?,saved), monthly=COALESCE(?,monthly) WHERE id=?',
+        b.name ?? null, b.icon ?? null, b.target != null ? Math.round(b.target) : null, b.saved != null ? Math.max(0, Math.round(b.saved)) : null, b.monthly != null ? Math.max(0, Math.round(b.monthly)) : null, id);
+      return { ok: true };
+    },
+    'DELETE /api/goals/:id': (_, { id }) => { run('DELETE FROM goals WHERE id=?', id); return { ok: true }; },
     'GET /api/memory': () => q(`SELECT m.key, m.n, m.label, m.category_id, c.name category, c.icon FROM memory m JOIN categories c ON c.id=m.category_id ORDER BY m.n DESC, m.label LIMIT 500`),
     'DELETE /api/memory': (_, __, u) => { run('DELETE FROM memory WHERE key=?', u.searchParams.get('key') || ''); return { ok: true, changed: recategorize(db) }; },
 

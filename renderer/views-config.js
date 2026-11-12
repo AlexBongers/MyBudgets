@@ -30,13 +30,16 @@ async function catTab() {
 }
 
 async function rulesTab() {
-  const rules = await GET('/rules');
+  const [rules, sugg] = await Promise.all([GET('/rules'), GET('/rules/suggest')]);
+  const suggHtml = sugg.length ? `<div class="card" style="margin-bottom:16px"><h2>Voorgestelde regels <span class="right muted">gebaseerd op je eigen keuzes</span></h2>
+    <div class="stack">${sugg.map((s, i) => `<div class="row between"><span>“${esc(s.label)}” → ${s.icon} ${esc(s.category)} <span class="faint small">${s.n}× zo ingedeeld</span></span><button class="btn sm" data-mkrule="${i}">Regel maken</button></div>`).join('')}</div></div>` : '';
   $('#tabactions').innerHTML = `<button class="btn" id="recat">↻ Alles opnieuw categoriseren</button><button class="btn primary" id="newrule">Nieuwe regel…</button>`;
-  $('#tabbody').innerHTML = rules.length ? `<div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th style="width:36px"></th><th>Voorwaarde</th><th>Categorie</th><th class="num">Prioriteit</th><th></th></tr></thead><tbody>
+  $('#tabbody').innerHTML = suggHtml + (rules.length ? `<div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th style="width:36px"></th><th>Voorwaarde</th><th>Categorie</th><th class="num">Prioriteit</th><th></th></tr></thead><tbody>
     ${rules.map(r => `<tr data-id="${r.id}" style="${r.enabled ? '' : 'opacity:.5'}"><td><input type="checkbox" data-toggle ${r.enabled ? 'checked' : ''} title="Aan/uit"></td><td>${esc(r.description)}</td><td>${r.icon} ${esc(r.category)}</td><td class="num">${r.priority}</td>
       <td class="num nowrap"><button class="btn sm" data-edit>Wijzig</button> <button class="btn sm danger" data-del>✕</button></td></tr>`).join('')}</tbody></table></div></div>
     <p class="muted small">Regels gaan vóór alles. Bij gelijke prioriteit wint de meest specifieke (langste) tekst. Handmatig bevestigde transacties blijven altijd zoals je ze hebt ingedeeld.</p>`
-    : `<div class="card empty">Nog geen eigen regels.<br>Maak er een voor tegenpartijen die je zelf wilt sturen, bijvoorbeeld “Albert Heijn boven €100 → Overig”.</div>`;
+    : `<div class="card empty">Nog geen eigen regels.<br>Maak er een voor tegenpartijen die je zelf wilt sturen, bijvoorbeeld “Albert Heijn boven €100 → Overig”.</div>`);
+  $$('[data-mkrule]').forEach(b => b.onclick = () => { const s = sugg[+b.dataset.mkrule]; ruleModal(null, { field: 'payee', op: 'contains', pattern: s.label, category_id: s.category_id }); });
   $('#newrule').onclick = () => ruleModal();
   $('#recat').onclick = guard(async () => { const r = await POST('/recategorize'); await refreshMeta(); toast(`${r.changed} transactie(s) opnieuw ingedeeld`); });
   $$('#tabbody tr[data-id]').forEach(tr => { const rule = rules.find(r => r.id === +tr.dataset.id);

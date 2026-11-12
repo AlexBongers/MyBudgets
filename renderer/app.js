@@ -24,6 +24,7 @@ async function refreshMeta() {
   updateNav();
 }
 async function go(tab) {
+  clearKeyHandler();
   if (tab === 'detail' && S.tab !== 'detail') S.backTab = S.tab;
   S.tab = tab; document.title = 'MyBudgets';
   $('#title').textContent = TITLES[tab];

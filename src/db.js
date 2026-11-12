@@ -77,6 +77,10 @@ function migrate(db) {
     category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL, amount INTEGER NOT NULL, note TEXT NOT NULL DEFAULT ''
   );
   CREATE INDEX IF NOT EXISTS splits_tx ON splits(tx_id);
+  CREATE TABLE IF NOT EXISTS goals (
+    id INTEGER PRIMARY KEY, name TEXT NOT NULL, icon TEXT NOT NULL DEFAULT '🎯', target INTEGER NOT NULL,
+    saved INTEGER NOT NULL DEFAULT 0, monthly INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL DEFAULT (date('now'))
+  );
   DROP VIEW IF EXISTS tl;
   -- 'tl' = transactieregels: gesplitste transacties zijn vervangen door hun delen (voor budget en rapporten)
   CREATE VIEW tl AS
