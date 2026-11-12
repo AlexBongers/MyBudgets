@@ -141,7 +141,7 @@ V.transactions = async () => {
     const c = catById(t.category_id), weak = !t.confirmed && (!t.category_id || t.cat_conf < 0.8);
     const tag = t.confirmed || t.cat_source === 'manual' ? '' : weak ? `<span class="tag warn" title="${esc(t.cat_reason)}">controleer</span>` : t.cat_source ? `<span class="tag" title="${esc(t.cat_reason)}">${SRC[t.cat_source] || 'auto'}</span>` : '';
     return `<tr data-id="${t.id}"><td><input type="checkbox" class="sel" aria-label="Selecteer ${esc(t.payee)}" ${selected.has(t.id) ? 'checked' : ''}></td><td class="nowrap">${fmtDay(t.date)}</td>
-      <td><div class="tx-name"><a href="#" class="open" style="color:inherit;text-decoration:none">${esc(t.payee)}</a>${t.notes ? ' 📝' : ''}</div><div class="small muted" style="max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.description)}</div></td>
+      <td><div class="tx-name"><a href="#" class="open" style="color:inherit;text-decoration:none">${esc(t.payee)}</a>${t.notes ? ' 📝' : ''}</div><div class="small muted ellipsis" style="max-width:min(420px,26vw)">${esc(t.description)}</div></td>
       <td>${t.split_count ? `<button class="btn sm open-split" title="Splitsing bekijken of wijzigen">✂️ Gesplitst · ${t.split_count} delen</button>` : `<div class="row" style="flex-wrap:nowrap">${catSelect(t.category_id, { none: '❔ kies…', cls: 'cat-input rowcat', attrs: `aria-label="Categorie voor ${esc(t.payee)}"` })}${tag}</div>`}</td>
       <td class="num ${t.amount < 0 ? '' : 'pos'}"><b>${eur(t.amount)}</b></td></tr>`;
   };

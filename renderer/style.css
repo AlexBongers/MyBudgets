@@ -65,7 +65,7 @@ input[type=checkbox]{accent-color:var(--accent)}
 .seg button.on{background:var(--card);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 /* cards */
 .grid{display:grid;gap:16px}
-.g4{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(420px,1fr))}.g21{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+.g4{grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}.g21{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
 @media (max-width:1180px){.g21{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
 .card h2{font-size:12px;margin:0 0 12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:8px}
@@ -142,7 +142,8 @@ td.sub{color:var(--muted);font-size:12px;max-width:380px;overflow:hidden;text-ov
 #toast.show{opacity:1;transform:translateX(-50%);pointer-events:auto}
 .toast-btn{border:0;background:none;color:#64d2ff;font:inherit;font-weight:600;cursor:default;padding:0}
 svg text{fill:var(--muted);font-size:11px;font-family:inherit}
-.cat-input{width:200px;max-width:100%}
+.cat-input{width:190px;max-width:100%}
+.ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 kbd{background:var(--hover);border-radius:4px;padding:0 5px;font:inherit;font-size:11px}
 hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 /* afdrukken / PDF: alleen de inhoud, altijd licht */
