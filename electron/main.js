@@ -15,11 +15,8 @@ let win = null, db = null, api = null;
 const pendingFiles = [];
 const dbPath = process.env.MYBUDGETS_DB || join(app.getPath('userData'), 'budget.db');
 
-function decode(buf) {
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^﻿/, ''); }
-  catch { return new TextDecoder('windows-1252').decode(buf); } // oudere Rabo-exports
-}
-const readCSV = p => ({ name: basename(p), text: decode(readFileSync(p)) });
+// De parser herkent de codering zelf (UTF-8 / ISO-8859-1); we sturen daarom de ruwe bytes door.
+const readCSV = p => ({ name: basename(p), base64: readFileSync(p).toString('base64') });
 const send = (m) => win && !win.isDestroyed() && win.webContents.send('menu', m);
 
 function startDb() {

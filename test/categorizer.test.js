@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { clean, merchantKey, displayName } from '../src/normalize.js';
 import { Categorizer } from '../src/categorizer.js';
-import { parseRabobank, parseAmount, parseDate, parseCSV } from '../src/csv.js';
+import { parseRabobank, parseAmount, parseDate } from '../src/rabobank.js';
 import { openDb, importTransactions, setCategory, recategorize, confirmSuggestions, DEFAULT_CATEGORIES } from '../src/db.js';
 
 const cats = DEFAULT_CATEGORIES.map((c, i) => ({ id: i + 1, key: c[0], name: c[1], kind: c[2] }));
@@ -28,9 +28,7 @@ test('csv: bedragen, datums, aanhalingstekens', () => {
   assert.equal(parseAmount('-1.234,56'), -123456);
   assert.equal(parseAmount('-0,05'), -5);
   assert.equal(parseDate('15-01-2026'), '2026-01-15');
-  assert.deepEqual(parseCSV('a,"b,c","d ""q"""\n1,2,3\n'), [['a', 'b,c', 'd "q"'], ['1', '2', '3']]);
-  assert.deepEqual(parseCSV('a;b\n1;2'), [['a', 'b'], ['1', '2']]);
-});
+  });
 
 test('csv: oud formaat zonder kopregel', () => {
   const line = '"NL12RABO0123456789","EUR","RABONL2U","7","2026-01-05","2026-01-05","-12,50","900,00","","Jumbo 1","","","","bc","","","","","","pin","","","","","",""';
@@ -39,7 +37,7 @@ test('csv: oud formaat zonder kopregel', () => {
 });
 
 test('csv: foutmelding bij verkeerd bestand', () => {
-  assert.throws(() => parseRabobank('foo,bar\n1,2'), /Geen Rabobank-CSV/);
+  assert.throws(() => parseRabobank('foo,bar\n1,2'), /niet herkend als Rabobank|Geen Rabobank-CSV/);
 });
 
 test('woordenboek categoriseert bekende winkels met uitleg', () => {

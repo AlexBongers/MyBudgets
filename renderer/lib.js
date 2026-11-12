@@ -83,11 +83,11 @@ const ICONS = {
 };
 const icon = n => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
 
-// Bestand (ArrayBuffer) -> tekst; val terug op Windows-1252 voor oudere Rabo-exports.
-async function readFileText(file) {
-  const buf = await file.arrayBuffer();
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^﻿/, ''); } catch { return new TextDecoder('windows-1252').decode(buf); }
-}
+// Bestand -> base64 van de ruwe bytes; de parser herkent zelf de codering (UTF-8 / ISO-8859-1).
+const readFileBase64 = file => new Promise((res, rej) => {
+  const r = new FileReader(); r.onerror = () => rej(new Error('Bestand kon niet worden gelezen'));
+  r.onload = () => res(String(r.result).split(',')[1] || ''); r.readAsDataURL(file);
+});
 function deltaChip(cur, prev, higherIsBad) {
   if (!prev || !cur) return '';
   const d = cur - prev, p = Math.round(Math.abs(d) / prev * 100);

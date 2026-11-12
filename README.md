@@ -27,6 +27,15 @@ Sleep het bestand in het venster of gebruik **⌘O**. Dubbele transacties worden
 periodes zijn dus geen probleem. Importeer ook je spaarrekening: dan worden overboekingen tussen je eigen
 rekeningen herkend en tellen ze niet mee als uitgave.
 
+### Parser
+
+`src/rabobank.js` is overgenomen uit je eigen repo `actual-budget-mcp` (`src/rabobank.ts`) en getest met dezelfde
+regressietests (`test/rabobank.test.js`). Hij detecteert scheidingsteken en codering (UTF-8, BOM, ISO-8859-1), repareert
+kapotte aanhalingstekens (met regelnummers), kent Nederlandse en Engelse kolomnamen, parseert bedragen en datums strikt,
+importeert alleen EUR en toont overgeslagen regels en reparaties na de import. Toegevoegd t.o.v. het origineel: saldo
+(`Saldo na trn`, voor het totaalsaldo), volgnummer en het oude formaat zonder kopregel.
+Dubbelen worden gedetecteerd met de sleutel rekening + volgnummer + datum + bedrag.
+
 ## Categoriseermodule (`src/categorizer.js`)
 
 Een transactie loopt langs zes lagen; de eerste die iets herkent wint, en elk resultaat heeft een zekerheid en uitleg

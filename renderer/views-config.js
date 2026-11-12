@@ -101,15 +101,17 @@ async function importFiles(files) {
   if (!files.length) return;
   const out = [];
   for (const f of files) {
-    try { const r = await POST('/import', { csv: f.text }); out.push({ name: f.name, r }); }
+    try { const r = await POST('/import', { base64: f.base64, csv: f.text, name: f.name }); out.push({ name: f.name, r }); }
     catch (e) { out.push({ name: f.name, error: e.message }); }
   }
   await refreshMeta();
   const ok = out.filter(o => o.r), added = ok.reduce((a, o) => a + o.r.added, 0);
   if (S.tab !== 'import') go('import');
   const res = $('#importres'); if (!res) return;
+  const details = r => (r.problemCount ? `<details style="margin-top:8px"><summary class="neg small">⚠ ${r.problemCount} regel${r.problemCount === 1 ? '' : 's'} overgeslagen</summary>${r.problems.map(p => `<div class="small muted">Regel ${p.row}: ${esc(p.reason)}</div>`).join('')}${r.problemCount > r.problems.length ? '<div class="small muted">…</div>' : ''}</details>` : '')
+    + (r.warnings.length ? `<details style="margin-top:6px"><summary class="small muted">ℹ ${r.warnings.length} automatische reparatie${r.warnings.length === 1 ? '' : 's'} / opmerking${r.warnings.length === 1 ? '' : 'en'}</summary>${r.warnings.map(w => `<div class="small muted">${esc(w)}</div>`).join('')}</details>` : '');
   res.innerHTML = out.map(o => o.error ? `<div class="card" style="border-color:var(--bad)"><b>${esc(o.name)}</b><div class="neg">⚠ ${esc(o.error)}</div></div>` :
-    `<div class="card"><b>${esc(o.name)}</b><div class="row" style="margin-top:6px;gap:16px"><span>✅ <b>${o.r.added}</b> nieuw</span><span class="muted">${o.r.skipped} dubbel overgeslagen</span>${o.r.from ? `<span class="muted">${fmtDate(o.r.from)} – ${fmtDate(o.r.to)}</span>` : ''}${o.r.newAccounts ? `<span class="tag blue">${o.r.newAccounts} nieuwe rekening</span>` : ''}</div></div>`).join('')
+    `<div class="card"><b>${esc(o.name)}</b><div class="row" style="margin-top:6px;gap:16px"><span>✅ <b>${o.r.added}</b> nieuw</span><span class="muted">${o.r.skipped} dubbel overgeslagen</span>${o.r.from ? `<span class="muted">${fmtDate(o.r.from)} – ${fmtDate(o.r.to)}</span>` : ''}${o.r.newAccounts ? `<span class="tag blue">${o.r.newAccounts} nieuwe rekening</span>` : ''}</div>${details(o.r)}</div>`).join('')
     + (ok.length ? `<div class="row" style="margin-top:6px">${S.review ? `<button class="btn primary" data-go="review">${S.review} transacties beoordelen →</button>` : ''}<button class="btn" data-go="dashboard">Naar dashboard</button></div>` : '');
   res.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   if (added) { S.month = null; toast(`${added} transacties geïmporteerd`); }
@@ -123,7 +125,7 @@ V.import = async () => {
       <hr><p class="muted small" style="margin:0">Tip: importeer ook je spaarrekening, dan herkent MyBudgets overboekingen tussen je eigen rekeningen automatisch.</p></div></div>`);
   const dz = $('#dz');
   dz.addEventListener('click', guard(async () => { if (window.native) importFiles(await window.native.openCSV()); else $('#file').click(); }));
-  $('#file').addEventListener('change', guard(async e => importFiles(await Promise.all([...e.target.files].map(async f => ({ name: f.name, text: await readFileText(f) }))))));
+  $('#file').addEventListener('change', guard(async e => importFiles(await Promise.all([...e.target.files].map(async f => ({ name: f.name, base64: await readFileBase64(f) }))))));
 };
 
 // ---------- Instellingen ----------

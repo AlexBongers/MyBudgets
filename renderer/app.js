@@ -72,7 +72,7 @@ window.addEventListener('drop', guard(async e => {
   e.preventDefault(); dragDepth = 0; $('#dropov')?.remove();
   const files = [...(e.dataTransfer?.files || [])].filter(f => /\.(csv|txt)$/i.test(f.name));
   if (!files.length) return toast('Sleep een .csv-bestand uit Rabo Internetbankieren');
-  importFiles(await Promise.all(files.map(async f => ({ name: f.name, text: await readFileText(f) }))));
+  importFiles(await Promise.all(files.map(async f => ({ name: f.name, base64: await readFileBase64(f) }))));
 }));
 
 guard(async () => { await refreshMeta(); await go('dashboard'); })();

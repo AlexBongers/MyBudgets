@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   AUTO_THRESHOLD, importTransactions, recategorize, setCategory, confirmSuggestions, resetAll, loadCategorizer,
 } from './db.js';
-import { parseRabobank } from './csv.js';
+import { parseRabobankCsv } from './rabobank.js';
 import { detectRecurring } from './recurring.js';
 import { describeRule } from './categorizer.js';
 
@@ -226,12 +226,20 @@ export function createApi(db, ctx = {}) {
     'POST /api/recategorize': () => ({ changed: recategorize(db) }),
 
     'POST /api/import': b => {
-      let parsed; try { parsed = parseRabobank(b.csv || ''); } catch (e) { throw httpErr(400, e.message); }
-      return importTransactions(db, parsed);
+      // Bij voorkeur de originele bytes (base64), zodat de codering betrouwbaar wordt herkend.
+      let parsed;
+      try { parsed = parseRabobankCsv(b.base64 ? Buffer.from(String(b.base64), 'base64') : String(b.csv ?? ''), { fileName: b.name }); }
+      catch (e) { throw httpErr(400, e.message); }
+      if (!parsed.transactions.length) throw httpErr(400, parsed.skippedRows.length
+        ? `Geen bruikbare transacties. Eerste probleem: regel ${parsed.skippedRows[0].row}: ${parsed.skippedRows[0].reason}` : 'Geen transacties gevonden in het bestand');
+      const r = importTransactions(db, parsed.transactions.map(t => t.tx));
+      return { ...r, skipped: r.skipped + parsed.duplicateRows.length, duplicatesInFile: parsed.duplicateRows.length,
+        rowsInFile: parsed.rowsInFile, problems: parsed.skippedRows.slice(0, 20), problemCount: parsed.skippedRows.length,
+        warnings: parsed.detection.warnings.slice(0, 10), encoding: parsed.detection.encoding, separator: parsed.detection.separator };
     },
     'POST /api/demo': () => {
       if (!ctx.demoCSV) throw httpErr(400, 'Geen voorbeelddata beschikbaar');
-      return importTransactions(db, parseRabobank(ctx.demoCSV()));
+      return importTransactions(db, parseRabobankCsv(ctx.demoCSV()).transactions.map(t => t.tx));
     },
 
     'GET /api/rules': () => q(`SELECT r.*, c.name category, c.icon, (SELECT 1) x FROM rules r JOIN categories c ON c.id=r.category_id ORDER BY r.priority DESC, c.name, r.pattern`)
