@@ -19,6 +19,8 @@ const HEADER_ALIASES = {
   balance: ['saldonatrn', 'saldonatransactie', 'saldo', 'balance'],
   counterpartyIban: ['tegenrekeningibanbban', 'tegenrekeningiban', 'counterpartyiban', 'counteraccountiban', 'counteraccount'],
   counterpartyName: ['naamtegenpartij', 'naamtegenrekening', 'counterpartyname', 'tegenpartij', 'relatie'],
+  finalParty: ['naamuiteindelijkepartij', 'ultimatepartyname'],
+  initiatingParty: ['naaminitierendepartij', 'initiatingpartyname'],
   reference: ['transactiereferentie', 'transactiereference', 'transactionreference'],
   code: ['code', 'transactioncode', 'transactiesoort'],
   sourceId: ['volgnr', 'volgnummer', 'sequencenumber', 'transactionid'],
@@ -87,7 +89,7 @@ export function parseRabobankCsv(input, options = {}) {
         skippedRows.push({ row: line, reason: `Valuta '${currency}' wordt niet ondersteund; alleen EUR.` }); continue;
       }
       const counterpartyIban = get(columnMap.counterpartyIban).replace(/\s+/g, '');
-      const counterpartyName = get(columnMap.counterpartyName);
+      const counterpartyName = get(columnMap.counterpartyName), finalParty = get(columnMap.finalParty), initiatingParty = get(columnMap.initiatingParty);
       const reference = get(columnMap.reference), sourceId = get(columnMap.sourceId), code = get(columnMap.code);
       const accountIban = get(columnMap.accountIban).replace(/\s+/g, '');
       const description = columnMap.descriptions.map(i => (row[i] ?? '').trim()).filter(Boolean).join(' ').replace(/\s+/g, ' ');
@@ -99,7 +101,7 @@ export function parseRabobankCsv(input, options = {}) {
       transactions.push({
         row: line, fingerprint,
         tx: {
-          date, amount, payee: counterpartyName || description.slice(0, 40) || reference || 'Onbekend', description,
+          date, amount, payee: pickPayee({ counterpartyName, finalParty, initiatingParty }) || description.slice(0, 40) || reference || 'Onbekend', description,
           account: accountIban, counter_iban: counterpartyIban, code: code.toLowerCase(), seq: Number(sourceId) || 0, balance,
           // Sleutel in de database: tolerant voor verschillen tussen exportformaten (omschrijving e.d.)
           key: [accountIban, sourceId, date, amount].join('|'),
@@ -231,6 +233,14 @@ export function parseAmount(value) {
   const cents = Number(`${int}${frac.padEnd(2, '0')}`);
   if (!Number.isSafeInteger(cents)) throw new Error(`Bedrag '${value}' is te groot.`);
   return negative ? -cents : cents;
+}
+
+// Bij betalingen via een betaalprovider (iDEAL, Mollie, Adyen, PayPal…) is de tegenpartij de provider; de echte
+// winkel staat dan in "Naam uiteindelijke partij". Zonder tegenpartij vallen we terug op uiteindelijke/initiërende partij.
+const PSP = /^(mollie|adyen|buckaroo|multisafepay|paypal|stripe|ccv|sisow|payplaza|worldline|ingenico|targetpay|digiwallet|pay\.?nl|sumup|zettle|klarna|afterpay|riverty|rabo omnikassa|omnikassa|paynl)\b/i;
+export function pickPayee({ counterpartyName, finalParty, initiatingParty }) {
+  if (finalParty && finalParty !== counterpartyName && (!counterpartyName || PSP.test(counterpartyName))) return finalParty;
+  return counterpartyName || initiatingParty || '';
 }
 
 function makeFingerprint(values) {

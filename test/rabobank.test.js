@@ -128,3 +128,11 @@ test('import-API: ISO-8859-1-bytes als base64, waarschuwingen en overgeslagen re
   assert.equal(again.added, 0);
   await assert.rejects(() => api('POST', '/api/import', { csv: 'Date,Amount\n1,2' }), /niet herkend/);
 });
+
+test('bij betaalproviders wordt de uiteindelijke partij de tegenpartij; zonder tegenpartij vallen we terug', () => {
+  const row = (name, final, init) => fullRow({ 0: iban, 1: 'EUR', 3: String(Math.random()), 4: '2026-08-01', 6: '-10,00', 9: name, 10: final, 11: init, 19: 'betaling' });
+  const csv = [csvLine(fullHeaders), csvLine(row('Mollie Payments', 'Bol.com', '')), csvLine(row('Albert Heijn', 'Iets Anders', '')),
+    csvLine(row('', '', 'Jan Initiator')), csvLine(row('', 'Eindpartij BV', 'Jan Initiator'))].join('\n');
+  const t = parseRabobankCsv(csv).transactions.map(x => x.tx.payee);
+  assert.deepEqual(t, ['Bol.com', 'Albert Heijn', 'Jan Initiator', 'Eindpartij BV']);
+});

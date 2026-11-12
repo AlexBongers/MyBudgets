@@ -155,7 +155,10 @@ export function loadCategorizer(db) {
   const training = db.prepare(`SELECT payee, description, amount, code, category_id FROM transactions
     WHERE confirmed=1 AND category_id IS NOT NULL ORDER BY id DESC LIMIT 4000`).all()
     .map(t => ({ ...t, tokens: tokensOf(t) }));
-  return new Categorizer({ categories, rules, memory, ownIbans, training });
+  // Partijen die in ≥3 verschillende maanden een vergelijkbaar bedrag (≥ €400, ±30%) storten
+  const recurringIncome = db.prepare(`SELECT merchant FROM transactions WHERE amount > 0 AND merchant <> '' GROUP BY merchant
+    HAVING COUNT(DISTINCT ym) >= 3 AND AVG(amount) >= 40000 AND MIN(amount) >= AVG(amount) * 0.7 AND MAX(amount) <= AVG(amount) * 1.3`).all().map(r => r.merchant);
+  return new Categorizer({ categories, rules, memory, ownIbans, training, recurringIncome });
 }
 
 const tx = (db, fn) => { db.exec('BEGIN'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };

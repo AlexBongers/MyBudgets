@@ -296,3 +296,16 @@ test('categorie samenvoegen verhuist transacties, regels, geheugen en budgetten'
   assert.equal(db.prepare('SELECT category_id FROM rules WHERE pattern=?').get('pizzeria').category_id, g);
   assert.equal(db.prepare('SELECT amount FROM budgets WHERE category_id=? AND month=?').get(g, '2026-10').amount, 20000);
 });
+
+test('terugkerend maandelijks inkomen wordt als salaris voorgesteld (suggestie, niet automatisch)', () => {
+  const db = openDb(':memory:');
+  const hdr = '"IBAN/BBAN","Munt","Volgnr","Datum","Bedrag","Naam tegenpartij","Omschrijving-1"';
+  const rows = [1, 2, 3, 4].map(n => `"NL01RABO0000000001","EUR","${n}","2026-0${n}-25","+2.450,00","Acme Holding BV","betaling ${n}"`);
+  importTransactions(db, parseRabobank([hdr, ...rows].join('\n')));
+  const r = db.prepare("SELECT category_id, cat_source, cat_conf, cat_reason FROM transactions").all();
+  assert.ok(r.every(x => x.category_id === id('salary') && x.cat_source === 'heur' && x.cat_conf < 0.8));
+  assert.match(r[0].cat_reason, /salaris/);
+  // één eenmalige storting van dezelfde partij is geen salaris
+  const db2 = openDb(':memory:'); importTransactions(db2, parseRabobank([hdr, rows[0]].join('\n')));
+  assert.equal(db2.prepare('SELECT category_id FROM transactions').get().category_id, null);
+});

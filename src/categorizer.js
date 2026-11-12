@@ -22,7 +22,8 @@ export function prepare(tx) {
 }
 
 export class Categorizer {
-  constructor({ categories, rules = [], memory = [], ownIbans = [], training = [] }) {
+  constructor({ categories, rules = [], memory = [], ownIbans = [], training = [], recurringIncome = [] }) {
+    this.recurringIncome = new Set(recurringIncome);
     this.byId = new Map(categories.map(c => [c.id, c]));
     this.byKey = new Map(categories.filter(c => c.key).map(c => [c.key, c]));
     this.rules = rules.filter(r => r.enabled !== 0 && this.byId.has(r.category_id))
@@ -137,6 +138,11 @@ export class Categorizer {
     if (String(tx.code || '').toLowerCase() === 'ga') {
       const cat = this.byKey.get('cash');
       if (cat) return { category_id: cat.id, source: 'heur', confidence: 0.9, reason: 'Geldopname bij geldautomaat' };
+    }
+    // Maandelijks terugkerend, vergelijkbaar inkomend bedrag van dezelfde partij: waarschijnlijk salaris (alleen suggestie)
+    if (tx.amount > 0 && tx.merchant && this.recurringIncome.has(tx.merchant)) {
+      const cat = this.byKey.get('salary');
+      if (cat) return { category_id: cat.id, source: 'heur', confidence: 0.75, reason: 'Terugkerend maandelijks inkomen: waarschijnlijk salaris' };
     }
     return null;
   }
