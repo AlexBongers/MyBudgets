@@ -114,9 +114,13 @@ async function importFiles(files) {
   const details = r => (r.problemCount ? `<details style="margin-top:8px"><summary class="neg small">⚠ ${r.problemCount} regel${r.problemCount === 1 ? '' : 's'} overgeslagen</summary>${r.problems.map(p => `<div class="small muted">Regel ${p.row}: ${esc(p.reason)}</div>`).join('')}${r.problemCount > r.problems.length ? '<div class="small muted">…</div>' : ''}</details>` : '')
     + (r.warnings.length ? `<details style="margin-top:6px"><summary class="small muted">ℹ ${r.warnings.length} automatische reparatie${r.warnings.length === 1 ? '' : 's'} / opmerking${r.warnings.length === 1 ? '' : 'en'}</summary>${r.warnings.map(w => `<div class="small muted">${esc(w)}</div>`).join('')}</details>` : '');
   res.innerHTML = out.map(o => o.error ? `<div class="card" style="border-color:var(--bad)"><b>${esc(o.name)}</b><div class="neg">⚠ ${esc(o.error)}</div></div>` :
-    `<div class="card"><b>${esc(o.name)}</b><div class="row" style="margin-top:6px;gap:16px"><span>✅ <b>${o.r.added}</b> nieuw</span><span class="muted">${o.r.skipped} dubbel overgeslagen</span>${o.r.from ? `<span class="muted">${fmtDate(o.r.from)} – ${fmtDate(o.r.to)}</span>` : ''}${o.r.newAccounts ? `<span class="tag blue">${o.r.newAccounts} nieuwe rekening</span>` : ''}</div>${details(o.r)}</div>`).join('')
+    `<div class="card"><b>${esc(o.name)}</b><div class="row" style="margin-top:6px;gap:16px"><span>✅ <b>${o.r.added}</b> nieuw</span><span class="muted">${o.r.skipped} dubbel overgeslagen</span>${o.r.from ? `<span class="muted">${fmtDate(o.r.from)} – ${fmtDate(o.r.to)}</span>` : ''}${o.r.newAccounts ? `<span class="tag blue">${o.r.newAccounts} nieuwe rekening</span>` : ''}${o.r.importId ? `<button class="btn sm ghost danger" data-revert="${o.r.importId}" style="margin-left:auto">Terugdraaien</button>` : ''}</div>${details(o.r)}</div>`).join('')
     + (ok.length ? `<div class="row" style="margin-top:6px">${S.review ? `<button class="btn primary" data-go="review">${S.review} transacties beoordelen →</button>` : ''}<button class="btn" data-go="dashboard">Naar dashboard</button></div>` : '');
   res.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+  res.querySelectorAll('[data-revert]').forEach(b => b.onclick = guard(async () => {
+    if (!(await ask('Import terugdraaien?', 'Alle transacties uit dit bestand worden weer verwijderd.', 'Terugdraaien', true))) return;
+    const r = await DEL('/imports/' + b.dataset.revert); await refreshMeta(); toast(`${r.deleted} transacties verwijderd`); b.closest('.card').remove(); updateNav();
+  }));
   if (added) { S.month = null; toast(`${added} transacties geïmporteerd`); }
 }
 
@@ -138,7 +142,7 @@ async function exportCSV() {
   else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })); a.download = name; a.click(); }
 }
 V.settings = async () => {
-  const accs = await GET('/accounts'); S.accounts = accs;
+  const [accs, imports] = await Promise.all([GET('/accounts'), GET('/imports')]); S.accounts = accs;
   const theme = pref.get('theme') || 'system';
   const m = render(`<div class="grid g2">
     <div class="card"><h2>Weergave</h2><div class="row between"><span>Thema</span><div class="seg" id="theme">${[['system', 'Systeem'], ['light', 'Licht'], ['dark', 'Donker']].map(([v, l]) => `<button data-v="${v}" class="${theme === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
@@ -148,7 +152,14 @@ V.settings = async () => {
       <div class="row"><button class="btn" id="exp">Transacties exporteren (CSV)…</button></div>
       ${window.native ? `<div class="row"><button class="btn" id="bk">Back-up maken…</button><button class="btn" id="rs">Back-up herstellen…</button><button class="btn" id="rv">Toon in Finder</button></div>` : ''}
       <p class="muted small" style="margin:0">Je gegevens staan lokaal in één databasebestand. Maak regelmatig een back-up (bijv. naar iCloud Drive of Time Machine).</p><hr>
-      <div class="row"><button class="btn" id="demo">Voorbeelddata laden</button><button class="btn danger" id="wipe">Alles wissen…</button></div></div></div></div>`);
+      <div class="row"><button class="btn" id="demo">Voorbeelddata laden</button><button class="btn danger" id="wipe">Alles wissen…</button></div></div></div>
+    <div class="card" style="grid-column:1/-1"><h2>Importgeschiedenis</h2>${imports.length ? `<table><thead><tr><th>Bestand</th><th>Geïmporteerd op</th><th>Periode</th><th class="num">Transacties</th><th></th></tr></thead><tbody>
+      ${imports.map(i => `<tr><td>${esc(i.name || '(naamloos)')}</td><td class="muted small">${esc(i.created.slice(0, 16).replace('T', ' '))}</td><td class="muted small">${i.from_date ? fmtDate(i.from_date) + ' – ' + fmtDate(i.to_date) : ''}</td><td class="num">${i.n}</td><td class="num"><button class="btn sm danger" data-undo-import="${i.id}" data-n="${i.n}">Terugdraaien</button></td></tr>`).join('')}</tbody></table>
+      <p class="muted small" style="margin-bottom:0">Terugdraaien verwijdert alle transacties van die import. Het geleerde geheugen blijft bewaard.</p>` : '<div class="empty">Nog geen imports.</div>'}</div></div>`);
+  $$('[data-undo-import]').forEach(b => b.addEventListener('click', guard(async () => {
+    if (!(await ask('Import terugdraaien?', `${b.dataset.n} transactie(s) van deze import worden verwijderd.`, 'Terugdraaien', true))) return;
+    const r = await DEL('/imports/' + b.dataset.undoImport); await refreshMeta(); toast(`${r.deleted} transacties verwijderd`); V.settings();
+  })));
   $('#theme').addEventListener('click', e => { const v = e.target.dataset.v; if (!v) return; pref.set('theme', v); applyTheme(v); $$('#theme button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); });
   m.querySelectorAll('[data-name]').forEach(i => i.addEventListener('change', guard(async () => { await PUT('/accounts/' + i.closest('[data-id]').dataset.id, { name: i.value }); await refreshMeta(); toast('Opgeslagen'); })));
   $('#exp').onclick = guard(exportCSV);

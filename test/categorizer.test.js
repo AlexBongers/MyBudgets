@@ -244,3 +244,20 @@ test('database op schijf: heropenen en migratie zijn idempotent, gegevens blijve
   assert.equal(db2.prepare("SELECT ym FROM transactions WHERE date='2026-10-25' LIMIT 1").get().ym, '2026-10');
   db2.close();
 });
+
+test('importgeschiedenis: elke import is terug te draaien', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:'); const api = createApi(db);
+  const hdr = '"IBAN/BBAN","Munt","Volgnr","Datum","Bedrag","Naam tegenpartij","Omschrijving-1"';
+  const mk = (n, d) => [hdr, `"NL01RABO0000000001","EUR","${n}","${d}","-5,00","Kruidvat","x"`].join('\n');
+  const a = await api('POST', '/api/import', { csv: mk(1, '2026-01-05'), name: 'jan.csv' });
+  const b = await api('POST', '/api/import', { csv: mk(2, '2026-02-05'), name: 'feb.csv' });
+  const none = await api('POST', '/api/import', { csv: mk(2, '2026-02-05'), name: 'feb-nogmaals.csv' });
+  assert.equal(none.added, 0); assert.equal(none.importId, null);
+  let list = await api('GET', '/api/imports');
+  assert.deepEqual(list.map(i => [i.name, i.n]), [['feb.csv', 1], ['jan.csv', 1]]);
+  const r = await api('DELETE', '/api/imports/' + b.importId); assert.equal(r.deleted, 1);
+  list = await api('GET', '/api/imports'); assert.equal(list.length, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM transactions').get().c, 1);
+  assert.ok(a.importId);
+});

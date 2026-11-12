@@ -59,6 +59,11 @@ function migrate(db) {
   addCol('transactions', 'cat_reason', "TEXT NOT NULL DEFAULT ''");
   addCol('transactions', 'confirmed', 'INTEGER NOT NULL DEFAULT 0');
   addCol('transactions', 'notes', "TEXT NOT NULL DEFAULT ''");
+  addCol('transactions', 'import_id', 'INTEGER');
+  db.exec(`CREATE TABLE IF NOT EXISTS imports (
+    id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '', created TEXT NOT NULL DEFAULT (datetime('now')),
+    added INTEGER NOT NULL DEFAULT 0, from_date TEXT, to_date TEXT
+  )`);
   // jaar-maand als afgeleide, geïndexeerde kolom: maandfilters gebruiken zo de index i.p.v. een volledige scan
   addCol('transactions', 'ym', 'TEXT GENERATED ALWAYS AS (substr(date, 1, 7)) VIRTUAL');
   // v1-regels (alleen patroon) -> nieuw regelformaat
@@ -155,8 +160,9 @@ export function loadCategorizer(db) {
 const tx = (db, fn) => { db.exec('BEGIN'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
 
 // ---------- importeren ----------
-export function importTransactions(db, parsed) {
+export function importTransactions(db, parsed, meta = {}) {
   return tx(db, () => {
+    const importId = Number(db.prepare('INSERT INTO imports (name) VALUES (?)').run(String(meta.name || '').slice(0, 200)).lastInsertRowid);
     const getAcc = db.prepare('SELECT id FROM accounts WHERE iban=?');
     const insAcc = db.prepare('INSERT INTO accounts (iban, name) VALUES (?,?)');
     const accId = new Map(); const newAccounts = [];
@@ -167,17 +173,19 @@ export function importTransactions(db, parsed) {
       accId.set(t.account, a.id);
     }
     const ins = db.prepare(`INSERT OR IGNORE INTO transactions
-      (date, amount, payee, description, account, account_id, counter_iban, code, seq, balance, merchant, key)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+      (date, amount, payee, description, account, account_id, counter_iban, code, seq, balance, merchant, key, import_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
     let added = 0, from = null, to = null;
     for (const t of parsed) {
       const r = ins.run(t.date, t.amount, displayName(t.payee), tidyDescription(t.description), t.account, accId.get(t.account),
-        t.counter_iban, t.code, t.seq, t.balance, merchantKey(t.payee, t.description), t.key);
+        t.counter_iban, t.code, t.seq, t.balance, merchantKey(t.payee, t.description), t.key, importId);
       if (r.changes) { added++; if (!from || t.date < from) from = t.date; if (!to || t.date > to) to = t.date; }
     }
+    if (added) db.prepare('UPDATE imports SET added=?, from_date=?, to_date=? WHERE id=?').run(added, from, to, importId);
+    else db.prepare('DELETE FROM imports WHERE id=?').run(importId); // niets nieuws: geen lege importregel bewaren
     const changed = recategorize(db);
     const rev = db.prepare(`SELECT COUNT(*) c FROM transactions WHERE confirmed=0 AND (category_id IS NULL OR cat_conf < ${AUTO_THRESHOLD - 0.001})`).get().c;
-    return { added, skipped: parsed.length - added, from, to, newAccounts: newAccounts.length, review: rev, recategorized: changed };
+    return { added, skipped: parsed.length - added, from, to, newAccounts: newAccounts.length, review: rev, recategorized: changed, importId: added ? importId : null };
   });
 }
 
@@ -294,5 +302,5 @@ export function restore(db, snap) {
 }
 
 export function resetAll(db) {
-  db.exec('DELETE FROM splits; DELETE FROM transactions; DELETE FROM memory; DELETE FROM budgets; DELETE FROM accounts;');
+  db.exec('DELETE FROM splits; DELETE FROM transactions; DELETE FROM imports; DELETE FROM memory; DELETE FROM budgets; DELETE FROM accounts;');
 }

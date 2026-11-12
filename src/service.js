@@ -357,14 +357,14 @@ export function createApi(db, ctx = {}) {
       catch (e) { throw httpErr(400, e.message); }
       if (!parsed.transactions.length) throw httpErr(400, parsed.skippedRows.length
         ? `Geen bruikbare transacties. Eerste probleem: regel ${parsed.skippedRows[0].row}: ${parsed.skippedRows[0].reason}` : 'Geen transacties gevonden in het bestand');
-      const r = importTransactions(db, parsed.transactions.map(t => t.tx));
+      const r = importTransactions(db, parsed.transactions.map(t => t.tx), { name: b.name });
       return { ...r, skipped: r.skipped + parsed.duplicateRows.length, duplicatesInFile: parsed.duplicateRows.length,
         rowsInFile: parsed.rowsInFile, problems: parsed.skippedRows.slice(0, 20), problemCount: parsed.skippedRows.length,
         warnings: parsed.detection.warnings.slice(0, 10), encoding: parsed.detection.encoding, separator: parsed.detection.separator };
     },
     'POST /api/demo': () => {
       if (!ctx.demoCSV) throw httpErr(400, 'Geen voorbeelddata beschikbaar');
-      return importTransactions(db, parseRabobankCsv(ctx.demoCSV()).transactions.map(t => t.tx));
+      return importTransactions(db, parseRabobankCsv(ctx.demoCSV()).transactions.map(t => t.tx), { name: 'Voorbeelddata' });
     },
 
     'GET /api/rules': () => q(`SELECT r.*, c.name category, c.icon, (SELECT 1) x FROM rules r JOIN categories c ON c.id=r.category_id ORDER BY r.priority DESC, c.name, r.pattern`)
@@ -396,6 +396,15 @@ export function createApi(db, ctx = {}) {
       return q(`SELECT m.key, m.label, m.n, m.category_id, c.name category, c.icon FROM memory m JOIN categories c ON c.id=m.category_id
         WHERE m.key LIKE 'm:%' AND m.n>=3 AND m.label<>'' AND (SELECT COUNT(*) FROM memory x WHERE x.key=m.key)=1 ORDER BY m.n DESC LIMIT 30`)
         .filter(r => !have.some(p => p && r.label.toLowerCase().includes(p))).slice(0, 8);
+    },
+    'GET /api/imports': () => q(`SELECT i.id, i.name, i.created, i.from_date, i.to_date, (SELECT COUNT(*) FROM transactions t WHERE t.import_id=i.id) n FROM imports i ORDER BY i.id DESC LIMIT 50`),
+    // Een hele import terugdraaien: verwijdert de bijbehorende transacties (en splitsingen); handmatige keuzes daarvan vervallen mee
+    'DELETE /api/imports/:id': (_, { id }) => {
+      const n = one('SELECT COUNT(*) c FROM transactions WHERE import_id=?', id).c;
+      db.exec('BEGIN');
+      try { run('DELETE FROM transactions WHERE import_id=?', id); run('DELETE FROM imports WHERE id=?', id); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
+      recategorize(db);
+      return { ok: true, deleted: n };
     },
     'GET /api/goals': () => q('SELECT * FROM goals ORDER BY id'),
     'POST /api/goals': b => {
