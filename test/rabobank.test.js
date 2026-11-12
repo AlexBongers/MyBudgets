@@ -136,3 +136,8 @@ test('bij betaalproviders wordt de uiteindelijke partij de tegenpartij; zonder t
   const t = parseRabobankCsv(csv).transactions.map(x => x.tx.payee);
   assert.deepEqual(t, ['Bol.com', 'Albert Heijn', 'Jan Initiator', 'Eindpartij BV']);
 });
+
+test('foutmelding bij onbekend formaat noemt de gevonden kolommen (handig om te diagnosticeren)', () => {
+  assert.throws(() => parseRabobankCsv('Boekdatum;Omschrijving;Waarde\n2026-01-01;x;1'), /Gevonden kolommen: "Boekdatum", "Omschrijving", "Waarde"/);
+  assert.throws(() => parseRabobankCsv('Date,Amount\n2026-08-01,-1.00\n'), /Gevonden kolommen: "Date", "Amount"/);
+});

@@ -66,8 +66,9 @@ export function parseRabobankCsv(input, options = {}) {
   const isRabobank = hasRequired && (strong || filenameHint);
   const detection = { isRabobank, separator, encoding: decoded.encoding, columns, warnings: uniqueWarnings(warnings) };
 
-  if (!hasRequired) throw new Error('Geen Rabobank-CSV: de kolommen Datum en Bedrag ontbreken. Exporteer als CSV (kommagescheiden) uit Rabo Internetbankieren.');
-  if (!isRabobank) throw new Error('Dit bestand is niet herkend als Rabobank-export. Verwacht kolommen zoals IBAN/BBAN, Rentedatum, Saldo na trn of Transactiereferentie.');
+  const found = `Gevonden kolommen: ${columns.slice(0, 14).map(c => `"${c}"`).join(', ')}${columns.length > 14 ? ', …' : ''}.`;
+  if (!hasRequired) throw new Error(`Geen Rabobank-CSV: de kolommen Datum en Bedrag ontbreken. Exporteer als CSV (kommagescheiden) uit Rabo Internetbankieren. ${found}`);
+  if (!isRabobank) throw new Error(`Dit bestand is niet herkend als Rabobank-export. Verwacht kolommen zoals IBAN/BBAN, Rentedatum, Saldo na trn of Transactiereferentie. ${found}`);
 
   const dataRows = parsedCsv.rows.slice(headerIndex + 1)
     .filter(r => r.fields.some(c => c.trim()));

@@ -98,7 +98,7 @@ V.review = async () => {
     if (e.target.matches('select')) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); focusCard(cur + 1); }
     else if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); focusCard(cur - 1); }
-    else if (e.key === 'Enter') { e.preventDefault(); card.querySelector('[data-accept]')?.click(); }
+    else if (e.key === 'Enter') { e.preventDefault(); const a = card.querySelector('[data-accept]'); if (a) a.click(); else card.querySelector('[data-pick]').focus(); } // zonder suggestie: zelf kiezen
     else if (e.key === 'c') { e.preventDefault(); card.querySelector('[data-pick]').focus(); }
     else if (e.key === 'r') { e.preventDefault(); card.querySelector('[data-rule]').click(); }
     else if (e.key === 'v') { e.preventDefault(); card.querySelector('[data-view]').click(); }
