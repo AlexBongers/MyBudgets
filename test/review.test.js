@@ -42,7 +42,7 @@ test('transactielijst: limit/offset worden geklemd (negatief betekent niet "alle
   const { api } = demo();
   assert.equal((await api('GET', '/api/transactions?limit=-5')).rows.length, 1);
   assert.equal((await api('GET', '/api/transactions?limit=2.7')).rows.length, 2);
-  assert.equal((await api('GET', '/api/transactions?limit=99999')).rows.length, 622 > 2000 ? 2000 : 622);
+  assert.equal((await api('GET', '/api/transactions?limit=99999')).rows.length, 622);   // geklemd op 2000; de demo heeft er 622
   assert.equal((await api('GET', '/api/transactions?limit=10&offset=-3')).rows.length, 10);
 });
 
