@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session, nativeTheme, screen, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session, nativeTheme, screen } from 'electron';
 import { readFileSync, writeFileSync, copyFileSync, existsSync, unlinkSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { join, basename } from 'node:path';
@@ -59,8 +59,8 @@ ipcMain.handle('api', async (_e, method, url, body) => {
   try { return { data: await api(method, url, body || {}) }; }
   catch (e) { return { __error: true, status: e.status || 500, message: e.message }; }
 });
-ipcMain.handle('dialog:open-notion', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Notion-export kiezen', properties: ['openFile'], filters: [{ name: 'Notion-export (ZIP of CSV)', extensions: ['zip', 'csv'] }] });
+ipcMain.handle('dialog:open-actual', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Actual Budget-export kiezen', properties: ['openFile'], filters: [{ name: 'Actual Budget-export (ZIP of db.sqlite)', extensions: ['zip', 'sqlite'] }] });
   return r.canceled ? [] : r.filePaths.map(p => ({ name: basename(p), base64: readFileSync(p).toString('base64') }));
 });
 ipcMain.handle('dialog:open', async () => {
@@ -125,16 +125,6 @@ ipcMain.handle('export:pdf', async (_e, name) => {
   const pdf = await win.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { marginType: 'default' } });
   writeFileSync(r.filePath, pdf); return true;
 });
-// Notion-token: versleuteld met de macOS-Sleutelhanger (safeStorage), nooit leesbaar op schijf
-const tokenFile = () => join(app.getPath('userData'), 'notion-token.bin');
-ipcMain.handle('secret:get', () => { try { return existsSync(tokenFile()) && safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(readFileSync(tokenFile())) : ''; } catch { return ''; } });
-ipcMain.handle('secret:set', (_e, v) => {
-  try {
-    if (!v) { if (existsSync(tokenFile())) unlinkSync(tokenFile()); return true; }
-    if (!safeStorage.isEncryptionAvailable()) return false;
-    writeFileSync(tokenFile(), safeStorage.encryptString(String(v))); return true;
-  } catch { return false; }
-});
 ipcMain.handle('theme:set', (_e, t) => { nativeTheme.themeSource = ['light', 'dark'].includes(t) ? t : 'system'; return true; });
 ipcMain.handle('shell:reveal', () => { shell.showItemInFolder(dbPath); return true; });
 
@@ -144,7 +134,7 @@ function buildMenu() {
     ...(isMac ? [{ label: app.name, submenu: [{ role: 'about', label: 'Over MyBudgets' }, { type: 'separator' }, { role: 'services', label: 'Services' }, { type: 'separator' }, { role: 'hide', label: 'Verberg MyBudgets' }, { role: 'hideOthers', label: 'Verberg andere' }, { role: 'unhide', label: 'Toon alles' }, { type: 'separator' }, { role: 'quit', label: 'Stop MyBudgets' }] }] : []),
     { label: 'Bestand', submenu: [
       { label: 'Rabobank CSV importeren…', accelerator: 'CmdOrCtrl+O', click: () => send({ action: 'import-dialog' }) },
-      { label: 'Importeren uit Notion…', click: () => send({ action: 'notion' }) },
+      { label: 'Importeren uit Actual Budget…', click: () => send({ action: 'actual' }) },
       { label: 'Transacties exporteren (CSV)…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send({ action: 'export' }) },
       { label: 'Dit scherm exporteren als PDF…', accelerator: 'CmdOrCtrl+P', click: () => send({ action: 'pdf' }) },
       { type: 'separator' },

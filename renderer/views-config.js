@@ -118,6 +118,8 @@ async function howTab() {
 // ---------- Importeren ----------
 async function importFiles(files) {
   if (!files.length) return;
+  const ext = files.find(f => /\.(zip|sqlite)$/i.test(f.name)); // Actual-export op het Rabobank-importscherm: naar de juiste wizard
+  if (ext) return loadActualFile(ext);
   const out = [];
   for (const f of files) {
     try { const r = await POST('/import', { base64: f.base64, csv: f.text, name: f.name }); out.push({ name: f.name, r }); }
@@ -130,7 +132,7 @@ async function importFiles(files) {
   const details = r => (r.problemCount ? `<details style="margin-top:8px"><summary class="neg small">⚠ ${r.problemCount} regel${r.problemCount === 1 ? '' : 's'} overgeslagen</summary>${r.problems.map(p => `<div class="small muted">Regel ${p.row}: ${esc(p.reason)}</div>`).join('')}${r.problemCount > r.problems.length ? '<div class="small muted">…</div>' : ''}</details>` : '')
     + (r.warnings.length ? `<details style="margin-top:6px"><summary class="small muted">ℹ ${r.warnings.length} automatische reparatie${r.warnings.length === 1 ? '' : 's'} / opmerking${r.warnings.length === 1 ? '' : 'en'}</summary>${r.warnings.map(w => `<div class="small muted">${esc(w)}</div>`).join('')}</details>` : '');
   res.innerHTML = out.map(o => o.error ? `<div class="card" style="border-color:var(--bad)"><b>${esc(o.name)}</b><div class="neg">⚠ ${esc(o.error)}</div></div>` :
-    `<div class="card"><b>${esc(o.name)}</b><div class="row" style="margin-top:6px;gap:16px"><span>✅ <b>${o.r.added}</b> nieuw</span><span class="muted">${o.r.skipped} dubbel overgeslagen</span>${o.r.from ? `<span class="muted">${fmtDate(o.r.from)} – ${fmtDate(o.r.to)}</span>` : ''}${o.r.newAccounts ? `<span class="tag blue">${o.r.newAccounts} nieuwe rekening</span>` : ''}${o.r.importId ? `<button class="btn sm ghost danger" data-revert="${o.r.importId}" style="margin-left:auto">Terugdraaien</button>` : ''}</div>${details(o.r)}</div>`).join('')
+    `<div class="card"><b>${esc(o.name)}</b><div class="row" style="margin-top:6px;gap:16px"><span>✅ <b>${o.r.added}</b> nieuw</span>${o.r.adopted ? `<span>🔗 <b>${o.r.adopted}</b> sloten aan op eerder geïmporteerde transacties</span>` : ''}<span class="muted">${o.r.skipped} dubbel overgeslagen</span>${o.r.from ? `<span class="muted">${fmtDate(o.r.from)} – ${fmtDate(o.r.to)}</span>` : ''}${o.r.newAccounts ? `<span class="tag blue">${o.r.newAccounts} nieuwe rekening</span>` : ''}${o.r.importId ? `<button class="btn sm ghost danger" data-revert="${o.r.importId}" style="margin-left:auto">Terugdraaien</button>` : ''}</div>${details(o.r)}</div>`).join('')
     + (ok.length ? `<div class="row" style="margin-top:6px">${S.review ? `<button class="btn primary" data-go="review">${S.review} transacties beoordelen →</button>` : ''}<button class="btn" data-go="dashboard">Naar dashboard</button></div>` : '');
   res.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
   res.querySelectorAll('[data-revert]').forEach(b => b.onclick = guard(async () => {
@@ -143,11 +145,11 @@ async function importFiles(files) {
 V.import = async () => {
   const m = render(`<div class="grid g21"><div class="stack">
     <div class="dz" id="dz"><div style="font-size:34px">📥</div><b style="color:var(--text)">Sleep je Rabobank CSV hierheen</b><br>of klik om een bestand te kiezen <span class="faint">(⌘O)</span>
-      <input type="file" id="file" accept=".csv,.txt,text/csv" multiple hidden></div><div id="importres" class="stack"></div></div>
-    <div class="card"><h2>Komen je gegevens uit Notion?</h2><p class="muted small" style="margin-top:0">Importeer je bestaande Notion-budget (ZIP of CSV): transacties, categorieën en budgetten, met voorbeeld vooraf.</p><button class="btn" id="tonotion">🗂️ Importeren uit Notion…</button></div>
+      <input type="file" id="file" accept=".csv,.txt,.zip,.sqlite,text/csv" multiple hidden></div><div id="importres" class="stack"></div></div>
+    <div class="card"><h2>Komen je gegevens uit Actual Budget?</h2><p class="muted small" style="margin-top:0">Importeer je bestaande Actual-budget (de export-ZIP): transacties, categorieën, rekeningen en budgetten, met voorbeeld vooraf.</p><button class="btn" id="toactual">📦 Importeren uit Actual Budget…</button></div>
     <div class="card"><h2>Exporteren uit Rabo Internetbankieren</h2><ol class="steps"><li>Log in op <b>Rabo Internetbankieren</b> en open je rekening.</li><li>Ga naar <b>Transacties</b> en kies <b>Downloaden</b>.</li><li>Kies de periode en als formaat <b>CSV</b> (kommagescheiden).</li><li>Importeer het bestand hier. Overlappende periodes zijn geen probleem: dubbele transacties worden overgeslagen.</li></ol>
       <hr><p class="muted small" style="margin:0">Tip: importeer ook je spaarrekening, dan herkent MyBudgets overboekingen tussen je eigen rekeningen automatisch.</p></div></div>`);
-  $('#tonotion')?.addEventListener('click', () => go('notion'));
+  $('#toactual')?.addEventListener('click', () => go('actual'));
   const dz = $('#dz');
   dz.addEventListener('click', guard(async () => { if (window.native) importFiles(await window.native.openCSV()); else $('#file').click(); }));
   $('#file').addEventListener('change', guard(async e => importFiles(await Promise.all([...e.target.files].map(async f => ({ name: f.name, base64: await readFileBase64(f) }))))));

@@ -1,4 +1,4 @@
-// Minimale ZIP-lezer zonder dependencies (methode 0 = opgeslagen, 8 = deflate). Genoeg voor Notion-exports.
+// Minimale ZIP-lezer zonder dependencies (methode 0 = opgeslagen, 8 = deflate). Genoeg voor Actual-exports.
 import { inflateRawSync } from 'node:zlib';
 
 const MAX_ENTRIES = 20000, MAX_TOTAL = 800 * 1024 * 1024; // bescherming tegen zip-bommen
@@ -12,7 +12,7 @@ export function readZip(buf) {
   if (eocd < 0) throw new Error('Geen geldig ZIP-bestand (einde van de index niet gevonden).');
   const count = buf.readUInt16LE(eocd + 10);
   let off = buf.readUInt32LE(eocd + 16);
-  if (count === 0xffff || off === 0xffffffff) throw new Error('ZIP64-bestanden worden niet ondersteund. Exporteer uit Notion in kleinere delen.');
+  if (count === 0xffff || off === 0xffffffff) throw new Error('ZIP64-bestanden worden niet ondersteund. Dit bestand is te groot voor deze importer.');
   if (count > MAX_ENTRIES) throw new Error('Het ZIP-bestand bevat te veel bestanden.');
   const out = []; let total = 0;
   for (let n = 0; n < count; n++) {

@@ -7,8 +7,7 @@ import {
 } from './db.js';
 import { parseRabobankCsv } from './rabobank.js';
 import { describeRule, AUTO_THRESHOLD } from './categorizer.js';
-import { createClient as createNotionClient } from './notion-api.js';
-import { loadTables, guessMapping, buildPlan, applyPlan, buildBudgetPlan, applyBudgetPlan } from './notion.js';
+import { loadTables, guessMapping, buildPlan, applyPlan, buildBudgetPlan, applyBudgetPlan } from './importer.js';
 import { createReports, REVIEW, GRP_ORDER } from './reports.js';
 import { MONTH_RE as monthRe, httpErr } from './util.js';
 
@@ -30,30 +29,18 @@ export function createApi(db, ctx = {}) {
     const get = db.prepare('SELECT merchant, counter_iban FROM transactions WHERE id=?'), rows = ids.map(i => get.get(i)).filter(Boolean);
     return recategorize(db, undefined, { merchants: [...new Set(rows.map(r => r.merchant))], ibans: [...new Set(rows.map(r => r.counter_iban))] });
   };
-  // Notion-tabellen cachen we kort (laatste 3 bestanden) zodat het voorbeeld snel blijft bijwerken
-  const notionCache = new Map();
-  async function notionTables(b) {
-    if (b.apiToken) { // rechtstreeks uit Notion (API); 5 minuten gecachet zodat het voorbeeld snel blijft
-      const ids = [...(b.databaseIds || [])].sort();
-      if (!ids.length) throw httpErr(400, 'Kies minimaal één database');
-      const key = 'api:' + createHash('sha1').update(String(b.apiToken) + ids.join(',')).digest('hex'), hit = notionCache.get(key);
-      if (hit && Date.now() - hit.at < 5 * 60e3) return hit.tables;
-      let tables;
-      try { const client = createNotionClient(b.apiToken, ctx.fetch); tables = []; for (const id of ids) tables.push(await client.databaseToTable(id)); }
-      catch (e) { throw httpErr(e.status && e.status < 600 ? e.status : 502, e.message); }
-      const seen = new Map(); tables.forEach(t => { const n = (seen.get(t.name) || 0) + 1; seen.set(t.name, n); if (n > 1) t.name += ` (${n})`; });
-      notionCache.set(key, { at: Date.now(), tables }); if (notionCache.size > 3) notionCache.delete(notionCache.keys().next().value);
-      return tables;
-    }
+  // Geanalyseerde exports cachen we kort (laatste 3 bestanden) zodat het voorbeeld snel blijft bijwerken
+  const importCache = new Map();
+  function exportTables(b) {
     if (!b.base64) throw httpErr(400, 'Geen bestand ontvangen');
     const key = createHash('sha1').update(b.base64).digest('hex');
-    if (!notionCache.has(key)) {
-      let t; try { t = loadTables(Buffer.from(b.base64, 'base64'), b.name || ''); } catch (e) { throw httpErr(400, e.message); }
-      notionCache.set(key, { at: Date.now(), tables: t }); if (notionCache.size > 3) notionCache.delete(notionCache.keys().next().value);
+    if (!importCache.has(key)) {
+      let t; try { t = loadTables(Buffer.from(b.base64, 'base64')); } catch (e) { throw httpErr(400, e.message); }
+      importCache.set(key, t); if (importCache.size > 3) importCache.delete(importCache.keys().next().value);
     }
-    return notionCache.get(key).tables;
+    return importCache.get(key);
   }
-  async function pickTable(b) { const t = (await notionTables(b)).find(x => x.name === b.table); if (!t) throw httpErr(400, 'Tabel niet gevonden in het bestand'); return t; }
+  function pickTable(b) { const t = exportTables(b).find(x => x.name === b.table); if (!t) throw httpErr(400, 'Tabel niet gevonden in het bestand'); return t; }
   const needCat = id => { if (!one('SELECT 1 FROM categories WHERE id=?', id)) throw httpErr(400, 'Onbekende categorie'); };
 
   const routes = {
@@ -166,6 +153,7 @@ export function createApi(db, ctx = {}) {
     'POST /api/recategorize': () => ({ changed: recategorize(db) }),
 
     'POST /api/import': b => {
+      if (b.base64) { const head = Buffer.from(String(b.base64).slice(0, 40), 'base64'); if (head[0] === 0x50 && head[1] === 0x4b || head.subarray(0, 6).toString('latin1') === 'SQLite') throw httpErr(400, 'Dit is een ZIP/SQLite-bestand, geen Rabobank-CSV. Gebruik Importeren uit Actual Budget voor een Actual-export.'); }
       // Bij voorkeur de originele bytes (base64), zodat de codering betrouwbaar wordt herkend.
       let parsed;
       try { parsed = parseRabobankCsv(b.base64 ? Buffer.from(String(b.base64), 'base64') : String(b.csv ?? ''), { fileName: b.name }); }
@@ -177,24 +165,20 @@ export function createApi(db, ctx = {}) {
         rowsInFile: parsed.rowsInFile, problems: parsed.skippedRows.slice(0, 20), problemCount: parsed.skippedRows.length,
         warnings: parsed.detection.warnings.slice(0, 10), encoding: parsed.detection.encoding, separator: parsed.detection.separator };
     },
-    // ---- Notion-import: analyseren, voorbeeld (plan) en uitvoeren. Stateless: het bestand gaat elke keer mee (gecachet).
-    'POST /api/notion/api/databases': async b => {
-      try { return { databases: await createNotionClient(b.token, ctx.fetch).listDatabases() }; }
-      catch (e) { throw httpErr(e.status && e.status < 600 ? e.status : 502, e.message); }
-    },
-    'POST /api/notion/analyze': async b => {
-      const tables = await notionTables(b);
+    // ---- Actual Budget-import: analyseren, voorbeeld (plan) en uitvoeren. Stateless: het bestand gaat elke keer mee (gecachet).
+    'POST /api/actual/analyze': b => {
+      const tables = exportTables(b);
       return { tables: tables.map(t => { const g = guessMapping(t); return { name: t.name, rows: t.rows.length, headers: t.headers, guess: g, samples: t.rows.slice(0, 6) }; }) };
     },
-    'POST /api/notion/plan': async b => {
-      const t = await pickTable(b);
+    'POST /api/actual/plan': b => {
+      const t = pickTable(b);
       try {
         if (b.kind === 'budgets') { const p = buildBudgetPlan(db, t, b.config || {}); return { kind: 'budgets', summary: p.summary, errors: p.errors.slice(0, 15), items: p.items.slice(0, 40) }; }
-        const p = buildPlan(db, t, b.config || {}); return { kind: 'transactions', summary: p.summary, preview: p.preview, errors: p.errors.slice(0, 15), categoryPlan: p.categoryPlan };
+        const p = buildPlan(db, t, b.config || {}); return { kind: 'transactions', summary: p.summary, preview: p.preview, errors: p.errors.slice(0, 15), categoryPlan: p.categoryPlan, accountPlan: p.accountPlan };
       } catch (e) { throw httpErr(400, e.message); }
     },
-    'POST /api/notion/import': async b => {
-      const t = await pickTable(b);
+    'POST /api/actual/import': b => {
+      const t = pickTable(b);
       try {
         if (b.kind === 'budgets') return { kind: 'budgets', ...applyBudgetPlan(db, buildBudgetPlan(db, t, b.config || {})) };
         return { kind: 'transactions', ...applyPlan(db, buildPlan(db, t, b.config || {}), { name: b.name || t.name }) };

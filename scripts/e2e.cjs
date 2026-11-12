@@ -32,12 +32,13 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
   await win.click('[data-tab=recurring]'); await win.waitForSelector('tr[data-m]'); ok('vaste lasten herkend', (await win.locator('tr[data-m]').count()) >= 8);
   await win.click('[data-tab=reports]'); await win.waitForSelector('.heat'); ok('rapport toont spaarquote', (await win.innerText('.heat')).includes('Spaarquote'));
 
-  // Notion-import via de native bestandsdialoog (gestubd): bestaande Rabobank-transacties worden verrijkt
-  await app.evaluate(({ dialog }, p) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [p] }); }, path.join(__dirname, '..', 'samples', 'notion-demo.zip'));
-  await win.evaluate(() => go('notion')); await win.waitForSelector('#ndz'); await win.click('#ndz'); await win.waitForSelector('#nplan table');
-  ok('notion: tabellen herkend', (await win.locator('#ntabs button').count()) === 2);
-  ok('notion: voorbeeld toont verrijking', (await win.innerText('#nplan')).includes('622 bestaande verrijkt'));
-  await win.click('#ngo'); await win.waitForSelector('.hero h2'); ok('notion: import klaar', (await win.innerText('.hero .card')).includes('622 bestaande transacties verrijkt'));
+  // Actual-import via de native bestandsdialoog (gestubd): kies de bestaande rekening, bestaande Rabobank-transacties worden verrijkt
+  await app.evaluate(({ dialog }, p) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [p] }); }, path.join(__dirname, '..', 'samples', 'actual-demo.zip'));
+  await win.evaluate(() => go('actual')); await win.waitForSelector('#ndz'); await win.click('#ndz'); await win.waitForSelector('#nplan table');
+  ok('actual: tabellen herkend', (await win.locator('#ntabs button').count()) === 2);
+  await win.selectOption('#nacc select[data-av]', { index: 1 }); await win.waitForTimeout(700);   // koppel aan de bestaande rekening
+  ok('actual: voorbeeld toont verrijking', /\d{3} bestaande verrijkt/.test(await win.innerText('#nplan')));
+  await win.click('#ngo'); await win.waitForSelector('.hero h2'); ok('actual: import klaar', (await win.innerText('.hero .card')).includes('bestaande transacties verrijkt'));
 
   await win.click('[data-tab=settings]'); await win.waitForSelector('#theme');
   ok('importgeschiedenis aanwezig', (await win.locator('[data-undo-import]').count()) >= 1);

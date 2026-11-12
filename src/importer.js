@@ -1,57 +1,25 @@
-// Importer voor een Notion-export: een ZIP ("Markdown & CSV") of losse CSV-bestanden.
-//
-// Notion heeft geen vast budget-formaat; iedereen bouwt zijn eigen database. Daarom werkt deze importer
-// niet van een vaste kolomindeling uit, maar:
-//   1. leest alle tabellen uit de export (ook geneste ZIP's, `_all.csv`-varianten, BOM, puntkomma),
-//   2. raadt per tabel het soort (transacties / budgetten) en de kolommen (op naam én op waarden),
-//   3. ontleedt datums en bedragen soepel (NL en EN notatie, bereiken, valuta, relaties),
-//   4. maakt een PLAN (voorbeeld zonder te schrijven) en voert dat daarna uit.
-// Bestaande transacties (bijv. uit je Rabobank-import) worden verrijkt met de Notion-categorie in plaats van dubbel te worden.
+// Importmotor voor een Actual Budget-export. De export wordt (in actual.js) omgezet naar tabellen; hier staat het generieke deel:
+//   1. kolommen raden en waarden ontleden (datums, bedragen),
+//   2. een PLAN maken (voorbeeld zonder te schrijven): rekeningen en categorieën koppelen, dubbelen en bestaande transacties herkennen,
+//   3. het plan uitvoeren (toevoegen, bestaande verrijken met categorie, daarvan leren).
+// Bestaande transacties (bijv. uit je Rabobank-import) worden verrijkt met de Actual-categorie in plaats van dubbel te worden.
 import { createHash } from 'node:crypto';
 import { isZip, readZip } from './zip.js';
-import { parseCsvRows, detectSeparator } from './rabobank.js';
 import { fold, merchantKey, displayName, tidyDescription } from './normalize.js';
 import { withTx, applyManual, recategorize } from './db.js';
-import { dayNum, addDays } from './util.js';
+import { dayNum, addDays, normIban } from './util.js';
+import { actualTables, isSqlite } from './actual.js';
 
 // ---------------------------------------------------------------- tabellen lezen
-const stripNotionId = n => n.replace(/_all$/i, '').replace(/\s+[0-9a-f]{32}$/i, '').replace(/\s+[0-9a-f]{32}(?=\.)/i, '');
-const decodeText = buf => {
-  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^\uFEFF/, ''); }
-  catch { return new TextDecoder('windows-1252').decode(buf); }
-};
-
-export function csvToTable(text, name) {
-  text = text.replace(/^\uFEFF/, '');
-  if (!text.trim()) return null;
-  let sep = ','; try { sep = detectSeparator(text); } catch { /* één kolom: geen scheidingsteken */ }
-  const rows = parseCsvRows(text, sep).rows.map(r => r.fields).filter(r => r.some(c => c.trim()));
-  if (rows.length < 2) return null;
-  const headers = rows[0].map((h, i) => h.replace(/^\uFEFF/, '').trim() || `Kolom ${i + 1}`);
-  const data = rows.slice(1).map(r => headers.map((_, i) => (r[i] ?? '').trim()));
-  return { name, headers, rows: data };
-}
-
-/** @returns {{name: string, headers: string[], rows: string[][]}[]} */
-export function loadTables(input, fileName = '', depth = 0) {
+/** Tabellen uit een Actual Budget-export: een ZIP met db.sqlite, of de losse db.sqlite. */
+export function loadTables(input) {
   const buf = Buffer.isBuffer(input) ? input : Buffer.from(input);
-  if (!isZip(buf)) {
-    const t = csvToTable(decodeText(buf), stripNotionId(String(fileName).replace(/\.[^.]+$/, '')) || 'Tabel');
-    if (!t) throw new Error('Geen tabel gevonden: het bestand is leeg of heeft geen gegevensregels.');
-    return [t];
-  }
-  const found = new Map(); // naam -> tabel (de `_all`-variant of grootste wint)
-  for (const e of readZip(buf)) {
-    if (/\.zip$/i.test(e.name) && depth < 2) { for (const t of loadTables(e.data, e.name, depth + 1)) keep(found, t); continue; }
-    if (!/\.csv$/i.test(e.name)) continue;
-    const base = stripNotionId(e.name.split('/').pop().replace(/\.csv$/i, ''));
-    const t = csvToTable(decodeText(e.data), base);
-    if (t) keep(found, t);
-  }
-  if (!found.size) throw new Error('In dit ZIP-bestand zitten geen CSV-tabellen. Exporteer uit Notion als "Markdown & CSV".');
-  return [...found.values()];
+  if (isSqlite(buf)) return actualTables(buf);
+  if (!isZip(buf)) throw new Error('Dit is geen Actual Budget-export. Exporteer in Actual via Settings → Export data (je krijgt een ZIP met db.sqlite).');
+  const adb = readZip(buf).find(e => /(^|\/)db\.sqlite$/i.test(e.name) && isSqlite(e.data));
+  if (!adb) throw new Error('In dit ZIP-bestand zit geen Actual Budget-database (db.sqlite). Exporteer in Actual via Settings → Export data.');
+  return actualTables(adb.data);
 }
-const keep = (map, t) => { const o = map.get(t.name); if (!o || t.rows.length > o.rows.length) map.set(t.name, t); };
 
 // ---------------------------------------------------------------- waarden ontleden
 const MONTHS = { januari: 1, january: 1, jan: 1, februari: 2, february: 2, feb: 2, maart: 3, march: 3, mrt: 3, mar: 3, april: 4, apr: 4, mei: 5, may: 5,
@@ -63,7 +31,7 @@ const iso = (y, m, d) => {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d ? `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` : null;
 };
 
-/** Ontleedt een Notion-datum. order: 'dmy' | 'mdy' voor dubbelzinnige 03/04/2026. Bereiken ("a → b") nemen de start. */
+/** Ontleedt een Actual-datum. order: 'dmy' | 'mdy' voor dubbelzinnige 03/04/2026. Bereiken ("a → b") nemen de start. */
 export function parseLooseDate(value, order = 'dmy') {
   let s = String(value ?? '').trim().replace(/^@/, '');
   if (!s) return null;
@@ -122,8 +90,8 @@ export function parseLooseMoney(value, dec = ',') {
   return neg ? -cents : cents;
 }
 
-const cleanRelation = s => String(s ?? '').replace(/\s*\(https?:\/\/[^)]*\)/g, '').replace(/%20/g, ' ').trim();
-const firstOf = s => cleanRelation(s).split(/\s*[,;]\s*(?![^()]*\))/)[0].trim();
+const cleanRelation = s => String(s ?? '').trim();
+const firstOf = s => cleanRelation(s);
 
 // ---------------------------------------------------------------- kolommen raden
 const ALIAS = {
@@ -204,7 +172,7 @@ export function guessMapping(table) {
   }
   return {
     kind, fields: f, budget: { amount: budget, month }, sign: 'auto', dateOrder: detectDateOrder(f.date ? stats[idx(f.date)].vals : []),
-    decimal: table.fromApi ? '.' : detectDecimalSep(f.amount ? stats[idx(f.amount)].vals : (f.amountOut ? [...stats[idx(f.amountOut)].vals, ...stats[idx(f.amountIn)].vals] : [])),
+    decimal: table.decimal || (table.fromApi ? '.' : '') || detectDecimalSep(f.amount ? stats[idx(f.amount)].vals : (f.amountOut ? [...stats[idx(f.amountOut)].vals, ...stats[idx(f.amountIn)].vals] : [])),
     columns: table.headers.map((h, i) => ({ name: h, date: +stats[i].date.toFixed(2), num: +stats[i].num.toFixed(2), unique: stats[i].unique })),
   };
 }
@@ -223,7 +191,7 @@ const SYNONYMS = {
   salary: ['salaris', 'loon', 'salary', 'wage'], benefits: ['toeslag', 'uitkering'], other_income: ['overig inkomen', 'terugbetaling', 'refund', 'inkomen', 'income'],
   transfer: ['sparen', 'spaar', 'overboek', 'transfer', 'savings'], invest: ['beleg', 'invest', 'pensioen', 'crypto', 'aandelen'], drugstore: ['drogist', 'verzorging', 'kapper', 'personal care'],
 };
-/** Zoek de bestaande categorie die bij een Notion-waarde past: exacte naam, dan synoniemen. */
+/** Zoek de bestaande categorie die bij een Actual-waarde past: exacte naam, dan synoniemen. */
 export function matchCategory(value, cats) {
   const v = fold(value).trim(); if (!v) return null;
   const exact = cats.find(c => fold(c.name) === v); if (exact) return exact;
@@ -289,18 +257,28 @@ export function buildPlan(db, table, cfg) {
 
   // eigen rekeningen
   const accounts = db.prepare('SELECT id, iban, name FROM accounts').all();
+  const prefix = table.source === 'actual' ? 'ACTUAL-' : 'ACTUAL-';
   const resolveAccount = a => {
     if (!a) return cfg.defaultAccount ? accounts.find(x => x.id === Number(cfg.defaultAccount)) ?? null : null;
-    const ib = a.replace(/\s+/g, '').toUpperCase();
-    return accounts.find(x => x.iban === ib) || accounts.find(x => fold(x.name) === fold(a)) || { create: true, name: a, iban: /^[A-Z]{2}\d{2}[A-Z0-9]{8,}$/.test(ib) ? ib : 'NOTION-' + fold(a).replace(/[^a-z0-9]+/g, '-') };
+    const ib = normIban(a);
+    const chosen = cfg.accountMap?.[a];                              // keuze van de gebruiker in de wizard
+    if (chosen?.type === 'existing') { const ex = accounts.find(x => x.id === Number(chosen.id)); if (ex) return ex; }
+    if (chosen?.type === 'new') {
+      const iban = normIban(chosen.iban);
+      return accounts.find(x => iban && x.iban === iban) || { create: true, name: String(chosen.name || a).slice(0, 80), iban: iban || prefix + fold(a).replace(/[^a-z0-9]+/g, '-') };
+    }
+    return accounts.find(x => x.iban === ib) || accounts.find(x => fold(x.name) === fold(a)) || { create: true, name: a, iban: /^[A-Z]{2}\d{2}[A-Z0-9]{8,}$/.test(ib) ? ib : prefix + fold(a).replace(/[^a-z0-9]+/g, '-') };
   };
   for (const x of rows) x.acct = resolveAccount(x.account);
+  const accCounts = new Map(); for (const x of rows) if (x.account) accCounts.set(x.account, (accCounts.get(x.account) || 0) + 1);
+  const accountPlan = [...accCounts].map(([value, count]) => { const a = resolveAccount(value);
+    return { value, count, action: a.create ? { type: 'new', name: a.name, iban: a.iban.startsWith(prefix) ? '' : a.iban } : { type: 'existing', id: a.id, name: a.name } }; });
 
-  // dubbelen binnen het bestand krijgen een volgnummer; eerdere Notion-imports worden herkend aan dezelfde sleutel
+  // dubbelen binnen het bestand krijgen een volgnummer; eerdere Actual-imports worden herkend aan dezelfde sleutel
   const seen = new Map();
   for (const x of rows) {
     const base = [x.acct?.iban || x.acct?.name || '', x.date, x.amount, fold(x.payee), fold(x.description)].join('|');
-    const n = (seen.get(base) || 0) + 1; seen.set(base, n); x.key = 'notion|' + hashKey(base + '#' + n);
+    const n = (seen.get(base) || 0) + 1; seen.set(base, n); x.key = 'actual|' + hashKey(base + '#' + n);
   }
   const keyExists = db.prepare('SELECT 1 FROM transactions WHERE key=?');
   for (const x of rows) x.already = !!keyExists.get(x.key);
@@ -309,7 +287,7 @@ export function buildPlan(db, table, cfg) {
   const existing = [];
   if (cfg.enrich !== false && rows.length) {
     const dates = rows.map(x => x.date).sort(), from = addDays(dates[0], -3), to = addDays(dates.at(-1), 3);
-    for (const t of db.prepare(`SELECT id, date, amount, account_id, payee, description, category_id, confirmed, notes FROM transactions WHERE date>=? AND date<=? AND key NOT LIKE 'notion|%'`).all(from, to)) existing.push(t);
+    for (const t of db.prepare(`SELECT id, date, amount, account_id, payee, description, category_id, confirmed, notes FROM transactions WHERE date>=? AND date<=? AND key NOT LIKE 'actual|%'`).all(from, to)) existing.push(t);
     const byAmount = new Map(); for (const t of existing) (byAmount.get(t.amount) || byAmount.set(t.amount, []).get(t.amount)).push(t);
     const cands = [];
     rows.forEach((x, i) => {
@@ -335,7 +313,11 @@ export function buildPlan(db, table, cfg) {
     if (chosen?.type === 'none') action = { type: 'none' };
     else if (chosen?.type === 'existing' && cats.find(c => c.id === chosen.id)) action = { type: 'existing', id: chosen.id, name: cats.find(c => c.id === chosen.id).name };
     else if (chosen?.type === 'new') action = { type: 'new', name: chosen.name || v.value, kind: chosen.kind || 'expense' };
-    else { const m = matchCategory(v.value, cats); action = m ? { type: 'existing', id: m.id, name: m.name, auto: true } : { type: 'new', name: v.value, kind: v.pos / v.count >= 0.6 ? 'income' : /spaar|overboek|transfer/i.test(v.value) ? 'transfer' : 'expense', auto: true }; }
+    else {
+      const m = matchCategory(v.value, cats), meta = table.categoryMeta?.[v.value]; // Actual weet zelf of het inkomen is en in welke groep het valt
+      action = m ? { type: 'existing', id: m.id, name: m.name, auto: true }
+        : { type: 'new', name: v.value, kind: meta ? (meta.income ? 'income' : 'expense') : v.pos / v.count >= 0.6 ? 'income' : /spaar|overboek|transfer/i.test(v.value) ? 'transfer' : 'expense', grp: meta?.group || '', auto: true };
+    }
     return { value: v.value, count: v.count, action };
   });
 
@@ -348,7 +330,7 @@ export function buildPlan(db, table, cfg) {
     income: rows.filter(x => x.amount > 0).reduce((a, x) => a + x.amount, 0), expenses: -rows.filter(x => x.amount < 0).reduce((a, x) => a + x.amount, 0),
     newCategories: categoryPlan.filter(c => c.action.type === 'new').length, newAccounts: new Set(rows.filter(x => x.acct?.create).map(x => x.acct.iban)).size,
   };
-  return { summary, rows, errors, categoryPlan, preview: rows.slice(0, 12).map(x => ({ line: x.line, date: x.date, amount: x.amount, payee: x.payee, description: x.description, category: x.category, account: x.account,
+  return { summary, rows, errors, categoryPlan, accountPlan, preview: rows.slice(0, 12).map(x => ({ line: x.line, date: x.date, amount: x.amount, payee: x.payee, description: x.description, category: x.category, account: x.account,
     status: x.already ? 'bestaat al' : x.match ? 'verrijkt bestaande' : 'nieuw' })) };
 }
 const words = s => new Set(fold(s).split(/[^a-z0-9]+/).filter(w => w.length > 2));
@@ -365,7 +347,7 @@ export function applyPlan(db, plan, { name = '' } = {}) {
       else if (a.type === 'new') {
         const ex = db.prepare('SELECT id FROM categories WHERE name=?').get(a.name);
         if (ex) catId.set(c.value, ex.id);
-        else { catId.set(c.value, Number(db.prepare('INSERT INTO categories (name, kind, color, icon, grp) VALUES (?,?,?,?,?)').run(a.name, a.kind || 'expense', pickColor(createdCats), '🏷️', a.kind === 'income' ? 'Inkomen' : a.kind === 'transfer' ? 'Overboekingen' : 'Overig').lastInsertRowid)); createdCats++; }
+        else { catId.set(c.value, Number(db.prepare('INSERT INTO categories (name, kind, color, icon, grp) VALUES (?,?,?,?,?)').run(a.name, a.kind || 'expense', pickColor(createdCats), '🏷️', a.grp || (a.kind === 'income' ? 'Inkomen' : a.kind === 'transfer' ? 'Overboekingen' : 'Overig')).lastInsertRowid)); createdCats++; }
       }
     }
     const accId = new Map();
@@ -376,7 +358,7 @@ export function applyPlan(db, plan, { name = '' } = {}) {
       const id = ex ? ex.id : Number(db.prepare('INSERT INTO accounts (iban, name) VALUES (?,?)').run(x.iban, x.name).lastInsertRowid);
       accId.set(x.iban, id); return id;
     };
-    const importId = Number(db.prepare('INSERT INTO imports (name) VALUES (?)').run(('Notion: ' + name).slice(0, 200)).lastInsertRowid);
+    const importId = Number(db.prepare('INSERT INTO imports (name) VALUES (?)').run(('Actual: ' + name).slice(0, 200)).lastInsertRowid);
     const ins = db.prepare(`INSERT OR IGNORE INTO transactions (date, amount, payee, description, account, account_id, counter_iban, code, seq, balance, merchant, key, import_id, notes)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
     const pairs = []; let added = 0, enriched = 0, from = null, to = null;
@@ -398,7 +380,7 @@ export function applyPlan(db, plan, { name = '' } = {}) {
     else db.prepare('DELETE FROM imports WHERE id=?').run(importId);
     return { added, enriched, learned, createdCategories: createdCats, importId: added ? importId : null, skipped: plan.rows.filter(x => x.already).length, errors: plan.errors.length };
   });
-  out.recategorized = recategorize(db); // nieuwe transacties zonder Notion-categorie krijgen de automatische indeling
+  out.recategorized = recategorize(db); // nieuwe transacties zonder Actual-categorie krijgen de automatische indeling
   return out;
 }
 const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'];
@@ -418,14 +400,28 @@ export function buildBudgetPlan(db, table, cfg) {
     if (mc >= 0 && r[mc]) { const m = /^(\d{4})-(\d{2})$/.exec(r[mc].trim()); const d = m ? `${m[1]}-${m[2]}-01` : parseLooseDate(r[mc], cfg.dateOrder || 'dmy'); if (d) month = d.slice(0, 7); }
     const mapped = cfg.categoryMap?.[value];
     const cat = mapped?.type === 'existing' ? cats.find(c => c.id === mapped.id) : mapped?.type === 'none' ? null : matchCategory(value, cats);
-    items.push({ line: n + 2, value, month, amount: Math.abs(cents), category: cat ? { id: cat.id, name: cat.name } : null });
+    // Categorie bestaat nog niet (bijv. nog nooit gebruikt in Actual): wordt bij het importeren aangemaakt
+    const create = !cat && mapped?.type !== 'none' ? { name: value, grp: table.categoryMeta?.[value]?.group || '' } : null;
+    items.push({ line: n + 2, value, month, amount: Math.abs(cents), category: cat ? { id: cat.id, name: cat.name } : null, create });
   });
-  return { items, errors, summary: { rows: table.rows.length, valid: items.filter(i => i.category).length, unmatched: items.filter(i => !i.category).length, errors: errors.length } };
+  const toCreate = new Set(items.filter(i => i.create).map(i => i.value));
+  return { items, errors, summary: { rows: table.rows.length, valid: items.filter(i => i.category || i.create).length, unmatched: items.filter(i => !i.category && !i.create).length, newCategories: toCreate.size, errors: errors.length } };
 }
 export function applyBudgetPlan(db, plan) {
   return withTx(db, () => {
     const up = db.prepare('INSERT INTO budgets (category_id, month, amount) VALUES (?,?,?) ON CONFLICT(category_id, month) DO UPDATE SET amount=excluded.amount');
-    let n = 0; for (const i of plan.items) if (i.category) { up.run(i.category.id, i.month, i.amount); n++; }
-    return { budgets: n, skipped: plan.items.length - n };
+    const created = new Map(); let n = 0;
+    for (const i of plan.items) {
+      let id = i.category?.id;
+      if (!id && i.create) {
+        if (!created.has(i.value)) {
+          const ex = db.prepare('SELECT id FROM categories WHERE name=?').get(i.create.name);
+          created.set(i.value, ex ? ex.id : Number(db.prepare('INSERT INTO categories (name, kind, color, icon, grp) VALUES (?,?,?,?,?)').run(i.create.name, 'expense', pickColor(created.size), '🏷️', i.create.grp || 'Overig').lastInsertRowid));
+        }
+        id = created.get(i.value);
+      }
+      if (id) { up.run(id, i.month, i.amount); n++; }
+    }
+    return { budgets: n, skipped: plan.items.length - n, createdCategories: created.size };
   });
 }

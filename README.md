@@ -10,7 +10,7 @@ Vereist [Node.js](https://nodejs.org) ≥ 22.13 (aanbevolen: LTS).
 ```bash
 npm install
 npm start          # opent de app
-npm test           # parser, categoriseermodule, corpus, service, server (72 tests)
+npm test           # parser, categoriseermodule, corpus, service, server (66 tests)
 npm run e2e        # doorloopt de echte app (17 controles, tijdelijke database)
 npm run dist       # bouwt dist/MyBudgets-*.dmg (Apple Silicon + Intel)
 ```
@@ -29,18 +29,17 @@ periodes zijn dus geen probleem. Importeer ook je spaarrekening: dan worden over
 rekeningen herkend en tellen ze niet mee als uitgave. Elke import staat in de **importgeschiedenis**
 (Instellingen) en is met één klik terug te draaien.
 
-### Importeren uit Notion
+### Importeren uit Actual Budget
 
-Bestand → **Importeren uit Notion…** (of sleep een `.zip` in het venster). Exporteer in Notion via ⋯ → Export → *Markdown & CSV* (met subpagina's voor meerdere databases). De importer
-(`src/notion.js`) leest de ZIP (ook geneste ZIP's en `_all.csv`), herkent per tabel of het transacties of budgetten zijn, raadt de kolommen op naam én op waarden, en begrijpt
-NL- en EN-datums (“12 november 2026”, “November 12, 2026 → …”), bedragen (`€1.234,56`, `-€1,234.50`, `(12,00)`), relaties met URL's, aparte uitgaven-/inkomstenkolommen en Type-kolommen.
-Je ziet altijd eerst een **voorbeeld** en kunt kolommen, tekens, datum- en decimaalnotatie en de **categorie-koppeling** aanpassen. Er wordt pas geschreven na “Importeren”.
-Staan dezelfde transacties al in MyBudgets (bijv. uit je Rabobank-import; zelfde bedrag, datum ±3 dagen), dan worden ze **verrijkt** met de Notion-categorie in plaats van dubbel te worden,
-en leert de app van elke indeling. Opnieuw importeren voegt niets dubbel toe; elke import is terug te draaien. Een voorbeeldexport staat in `samples/notion-demo.zip`.
+Bestand → **Importeren uit Actual Budget…** (of sleep de ZIP/`db.sqlite` in het venster). Exporteer in Actual via je budgetnaam → Settings → *Export data*.
+De importer (`src/actual.js` + `src/importer.js`) leest de `db.sqlite` uit die ZIP (alleen-lezen) en neemt over: transacties (datum, bedrag, tegenpartij, ruwe banktekst, notities),
+categorieën mét groepen en inkomen/uitgave, rekeningen, overboekingen (transfer-payees), splitsingen en het maandbudget (tracking of envelope).
+Je ziet eerst een **voorbeeld** en koppelt Actual-rekeningen aan bestaande of nieuwe rekeningen (met optioneel je echte IBAN) en Actual-categorieën aan die van MyBudgets (herkend op naam en synoniemen, NL/EN) of nieuwe.
+Er wordt pas geschreven na “Importeren”; de app leert van elke meegebrachte indeling.
 
-**Rechtstreeks via de Notion-API** (zonder export): maak een integratie op notion.so/my-integrations, deel je database(s) ermee (⋯ → Connections), plak het token in de wizard en kies je databases
-(`src/notion-api.js`; dezelfde REST-API als `notion-sdk-js`, zonder dependency). Ondersteund: paginering, rate-limit-retry, alle eigenschapstypen (titel, getal, datum, select, status, formule, rollup, relatie → paginatitel…).
-Het token kan versleuteld in de macOS-Sleutelhanger worden onthouden (`safeStorage`).
+- Staan dezelfde transacties al in MyBudgets (bijv. uit je Rabobank-import; zelfde bedrag, datum ±3 dagen), dan worden ze **verrijkt** met je Actual-categorie in plaats van dubbel te worden.
+- Importeer je later een **Rabobank-CSV** voor dezelfde rekening (zelfde IBAN), dan sluiten de transacties erop aan (zelfde datum en bedrag): ze krijgen volgnummer, saldo en tegenrekening van de bank en houden hun categorie.
+- Opnieuw importeren voegt niets dubbel toe; elke import staat in de importgeschiedenis en is terug te draaien. Een voorbeeldexport staat in `samples/actual-demo.zip` (gegenereerd met `samples/make-actual-demo.js`).
 
 ### Parser
 
@@ -103,7 +102,7 @@ Sneltoetsen: ⌘O importeren · ⌘K zoeken/navigeren · ⌘1–7 schermen · �
 ```
 electron/   hoofdproces (venster, menu, IPC, bestandsdialogen) + preload
 src/        rabobank (parser), normalize, merchants, categorizer, db (schema/migraties/schrijven), reports (leesmodel),
-            service (API-routes), recurring, notion + notion-api + zip (Notion-import), util (gedeelde helpers), server (dev)
+            service (API-routes), recurring, actual + importer + zip (Actual-import), util (gedeelde helpers), server (dev)
 renderer/   interface (vanilla JS/SVG, geen dependencies)
 samples/    generate.js en rabobank-demo.csv (fictieve data)
 scripts/    bench.js

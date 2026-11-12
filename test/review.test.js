@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 import { openDb, importTransactions } from '../src/db.js';
 import { parseRabobank } from '../src/rabobank.js';
 import { createApi } from '../src/service.js';
-import { loadTables, guessMapping, buildPlan } from '../src/notion.js';
 import { addMonths, daysIn, addDays, dayNum, normIban, clampInt } from '../src/util.js';
 
 const demo = () => { const db = openDb(':memory:'); importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8'))); return { db, api: createApi(db) }; };
@@ -75,18 +74,4 @@ test('rekening hernoemen: lengte begrensd, lege naam wordt "Rekening"', async ()
   const id = db.prepare('SELECT id FROM accounts').get().id;
   await api('PUT', '/api/accounts/' + id, { name: 'x'.repeat(200) }); assert.equal(db.prepare('SELECT name FROM accounts').get().name.length, 80);
   await api('PUT', '/api/accounts/' + id, { name: '   ' }); assert.equal(db.prepare('SELECT name FROM accounts').get().name, 'Rekening');
-});
-
-test('Notion: rij met onbekend Type in een tabel zonder minbedragen wordt uitgave, niet inkomen', () => {
-  const db = openDb(':memory:');
-  const csv = ['Naam,Datum,Bedrag,Type', 'A,2026-01-05,"10,00",Uitgave', 'B,2026-01-06,"20,00",Inkomsten', 'C,2026-01-07,"30,00",???', 'D,2026-01-08,"40,00",'].join('\n');
-  const t = loadTables(Buffer.from(csv), 'x.csv')[0], g = guessMapping(t);
-  const p = buildPlan(db, t, { fields: g.fields, decimal: g.decimal, sign: 'auto' });
-  assert.deepEqual(p.rows.map(r => [r.payee, r.amount]), [['A', -1000], ['B', 2000], ['C', -3000], ['D', -4000]]);
-});
-
-test('Notion: fouten in het budgetvoorbeeld geven 400 (geen 500)', async () => {
-  const db = openDb(':memory:'), api = createApi(db);
-  const body = { base64: Buffer.from('Categorie,Budget\nBoodschappen,450').toString('base64'), name: 'b.csv', table: 'b', kind: 'budgets', config: { fields: {}, budget: {} } };
-  assert.equal(await status(api('POST', '/api/notion/plan', body)), 400);
 });

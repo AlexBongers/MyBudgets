@@ -180,17 +180,26 @@ export function importTransactions(db, parsed, meta = {}) {
     const ins = db.prepare(`INSERT OR IGNORE INTO transactions
       (date, amount, payee, description, account, account_id, counter_iban, code, seq, balance, merchant, key, import_id)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
-    let added = 0, from = null, to = null;
+    // Transactie die al via een Actual-import binnen is (key 'actual|…') op dezelfde rekening/datum/bedrag? Dan nemen we de bankgegevens
+    // over (volgnummer, saldo, tegenrekening, code) en behouden categorie en bevestiging, in plaats van een dubbele toe te voegen.
+    const findImported = db.prepare("SELECT id FROM transactions WHERE account_id=? AND date=? AND amount=? AND key LIKE 'actual|%' ORDER BY id LIMIT 1");
+    const adopt = db.prepare('UPDATE transactions SET key=?, seq=?, balance=?, counter_iban=?, code=?, account=?, import_id=? WHERE id=?');
+    const exists = db.prepare('SELECT 1 FROM transactions WHERE key=?');
+    let added = 0, adopted = 0, from = null, to = null;
     for (const t of parsed) {
+      if (!exists.get(t.key)) {
+        const hit = findImported.get(accId.get(t.account), t.date, t.amount);
+        if (hit) { adopt.run(t.key, t.seq, t.balance, t.counter_iban, t.code, t.account, importId, hit.id); adopted++; continue; }
+      }
       const r = ins.run(t.date, t.amount, displayName(t.payee), tidyDescription(t.description), t.account, accId.get(t.account),
         t.counter_iban, t.code, t.seq, t.balance, merchantKey(t.payee, t.description), t.key, importId);
       if (r.changes) { added++; if (!from || t.date < from) from = t.date; if (!to || t.date > to) to = t.date; }
     }
-    if (added) db.prepare('UPDATE imports SET added=?, from_date=?, to_date=? WHERE id=?').run(added, from, to, importId);
+    if (added || adopted) db.prepare('UPDATE imports SET added=?, from_date=?, to_date=? WHERE id=?').run(added + adopted, from || parsed.map(t => t.date).sort()[0], to || parsed.map(t => t.date).sort().at(-1), importId);
     else db.prepare('DELETE FROM imports WHERE id=?').run(importId); // niets nieuws: geen lege importregel bewaren
     const changed = recategorize(db);
     const rev = db.prepare(`SELECT COUNT(*) c FROM transactions WHERE confirmed=0 AND (category_id IS NULL OR cat_conf < ${AUTO_THRESHOLD - 0.001})`).get().c;
-    return { added, skipped: parsed.length - added, from, to, newAccounts: newAccounts.length, review: rev, recategorized: changed, importId: added ? importId : null };
+    return { added, adopted, skipped: parsed.length - added - adopted, from, to, newAccounts: newAccounts.length, review: rev, recategorized: changed, importId: added || adopted ? importId : null };
   });
 }
 
@@ -275,9 +284,9 @@ export function setCategory(db, ids, categoryId, { learnFrom = true } = {}) {
   });
 }
 
-// Zet in één keer handmatige categorieën (bijv. uit een Notion-import) en leer ervan, in de gegeven volgorde
+// Zet in één keer handmatige categorieën (bijv. uit een Actual-import) en leer ervan, in de gegeven volgorde
 // (chronologisch: de nieuwste keuze telt het zwaarst). Draait binnen de transactie van de aanroeper.
-export function applyManual(db, pairs, reason = 'Uit Notion') {
+export function applyManual(db, pairs, reason = 'Uit Actual') {
   const get = db.prepare('SELECT * FROM transactions WHERE id=?');
   const up = db.prepare('UPDATE transactions SET category_id=?, cat_source=?, cat_conf=?, cat_reason=?, confirmed=1 WHERE id=?');
   let n = 0;

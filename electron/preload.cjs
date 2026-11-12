@@ -7,14 +7,13 @@ contextBridge.exposeInMainWorld('native', {
     return r.data;
   },
   openCSV: () => ipcRenderer.invoke('dialog:open'),
-  openNotion: () => ipcRenderer.invoke('dialog:open-notion'),
+  openActual: () => ipcRenderer.invoke('dialog:open-actual'),
   saveFile: (name, text) => ipcRenderer.invoke('dialog:save', name, text),
   backup: () => ipcRenderer.invoke('db:backup'),
   restore: () => ipcRenderer.invoke('db:restore'),
   reveal: () => ipcRenderer.invoke('shell:reveal'),
   setTheme: t => ipcRenderer.invoke('theme:set', t),
   backups: { list: () => ipcRenderer.invoke('backups:list'), restore: n => ipcRenderer.invoke('backups:restore', n), reveal: () => ipcRenderer.invoke('backups:reveal') },
-  secret: { get: () => ipcRenderer.invoke('secret:get'), set: v => ipcRenderer.invoke('secret:set', v) },
   exportPDF: name => ipcRenderer.invoke('export:pdf', name),
   onMenu: cb => ipcRenderer.on('menu', (_e, m) => cb(m)),
 });

@@ -1,10 +1,10 @@
 # Changelog
 
-## 2.3.0
-- Notion rechtstreeks via de API (token, databases kiezen), met paginering, rate-limit-retry en alle eigenschapstypen; token versleuteld te onthouden.
-
-## 2.2.0
-- **Notion-importer**: ZIP/CSV-export lezen, automatische kolom- en formaatherkenning (NL/EN), voorbeeld vooraf, categorie-koppeling, budgetten, verrijken van bestaande transacties, herhaald importeren zonder dubbelen.
+## 2.4.0
+- **Actual Budget-importer** (export-ZIP of `db.sqlite`): transacties, categorieën met groepen, rekeningen, overboekingen, splitsingen en budgetten (tracking/envelope), met voorbeeld vooraf, rekening- en categoriekoppeling, verrijken van bestaande transacties en leren van je indelingen.
+- Een latere Rabobank-CSV voor dezelfde rekening sluit aan op geïmporteerde transacties in plaats van dubbel te worden.
+- Notion-importer verwijderd (API-koppeling, token-opslag, CSV/ZIP-lezen).
+- Budgetregels voor categorieën zonder transacties maken de categorie aan.
 
 ## 2.1.0
 
