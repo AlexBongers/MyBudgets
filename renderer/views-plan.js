@@ -36,13 +36,13 @@ V.budget = async () => {
 
 // ---------- Vaste lasten ----------
 V.recurring = async () => {
-  const list = await GET('/recurring');
+  const [list, ignored] = await Promise.all([GET('/recurring'), GET('/recurring/ignored')]);
   const act = list.filter(r => r.active), old = list.filter(r => !r.active);
   const monthly = act.reduce((a, r) => a + r.monthly, 0), today = new Date().toISOString().slice(0, 10);
   const rel = d => { const n = Math.round((new Date(d) - new Date(today)) / 864e5); return n === 0 ? 'vandaag' : n > 0 ? `over ${n} dag${n === 1 ? '' : 'en'}` : `${-n} dagen geleden`; };
-  const tbl = (rows, dim) => `<table><thead><tr><th>Naam</th><th>Categorie</th><th>Frequentie</th><th class="num">Bedrag</th><th class="num">Per maand</th><th>Laatste</th><th>Volgende</th></tr></thead><tbody>
+  const tbl = (rows, dim) => `<table><thead><tr><th>Naam</th><th>Categorie</th><th>Frequentie</th><th class="num">Bedrag</th><th class="num">Per maand</th><th>Laatste</th><th>Volgende</th><th></th></tr></thead><tbody>
     ${rows.map(r => `<tr data-m="${esc(r.merchant)}" style="${dim ? 'opacity:.6' : ''}"><td class="tx-name">${esc(r.name)}</td><td>${catChip(catById(r.category_id))}</td><td>${r.frequency}${r.variable ? ' <span class="tag" title="Bedrag wisselt">variabel</span>' : ''}</td>
-    <td class="num">${r.variable ? '~' : ''}${eur(r.amount)}</td><td class="num">${eur0(r.monthly)}</td><td class="muted small">${fmtDay(r.last)}</td><td class="small">${dim ? '–' : `${fmtDay(r.next)} <span class="muted">· ${rel(r.next)}</span>`}</td></tr>`).join('')}</tbody></table>`;
+    <td class="num">${r.variable ? '~' : ''}${eur(r.amount)}</td><td class="num">${eur0(r.monthly)}</td><td class="muted small">${fmtDay(r.last)}</td><td class="small">${dim ? '–' : `${fmtDay(r.next)} <span class="muted">· ${rel(r.next)}</span>`}</td><td class="num"><button class="btn sm ghost" data-ignore="${esc(r.merchant)}" data-name="${esc(r.name)}" title="Dit is geen vaste last">✕</button></td></tr>`).join('')}</tbody></table>`;
   const m = render(list.length ? `
     <div class="grid g4" style="margin-bottom:16px">
       <div class="card kpi"><h2>Vaste lasten</h2><div class="v">${eur0(monthly)}</div><div class="sub">per maand · ${act.length} posten</div></div>
@@ -51,9 +51,12 @@ V.recurring = async () => {
       <div class="card kpi"><h2>Abonnementen</h2><div class="v">${eur0(act.filter(r => catById(r.category_id)?.key === 'subscriptions').reduce((a, r) => a + r.monthly, 0))}</div><div class="sub">streaming, software e.d.</div></div></div>
     <div class="card" style="padding:0;margin-bottom:16px"><div class="tablewrap">${tbl(act)}</div></div>
     ${old.length ? `<h3 class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.05em">Niet meer actief</h3><div class="card" style="padding:0"><div class="tablewrap">${tbl(old, true)}</div></div>` : ''}
-    <p class="muted small">Terugkerende betalingen worden automatisch herkend op basis van regelmaat in datum en bedrag. Supermarkten, horeca en tanken tellen niet mee.</p>`
+    <p class="muted small">Terugkerende betalingen worden automatisch herkend op basis van regelmaat in datum en bedrag. Supermarkten, horeca en tanken tellen niet mee. Klopt iets niet? Met ✕ haal je een post weg.
+      ${ignored.length ? `<br>Genegeerd: ${ignored.map(i => `${esc(i.name)} <a href="#" data-unignore="${esc(i.merchant)}">herstel</a>`).join(' · ')}` : ''}</p>`
     : `<div class="empty">Nog geen terugkerende betalingen herkend. Importeer minimaal 3 maanden aan transacties.</div>`);
   m.querySelectorAll('tr[data-m]').forEach(tr => tr.addEventListener('click', () => openMerchant(tr.dataset.m)));
+  m.querySelectorAll('[data-ignore]').forEach(b => b.addEventListener('click', guard(async e => { e.stopPropagation(); await POST('/recurring/ignore', { merchant: b.dataset.ignore, name: b.dataset.name }); toast(`“${b.dataset.name}” telt niet meer als vaste last`); V.recurring(); })));
+  m.querySelectorAll('[data-unignore]').forEach(a => a.addEventListener('click', guard(async e => { e.preventDefault(); await POST('/recurring/ignore', { merchant: a.dataset.unignore, ignore: false }); V.recurring(); })));
 };
 
 // ---------- Rapporten ----------

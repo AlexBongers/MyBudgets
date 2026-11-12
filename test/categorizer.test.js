@@ -324,3 +324,16 @@ test('back-up: consistente kopie die als database te openen is, ook met bestaand
   assert.equal(copy.prepare('SELECT COUNT(*) c FROM categories').get().c > 20, true);
   copy.close(); db.close();
 });
+
+test('vaste last negeren en herstellen', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:'); const api = createApi(db);
+  importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  const names = async () => (await api('GET', '/api/recurring')).map(r => r.merchant);
+  assert.ok((await names()).includes('basic fit'));
+  await api('POST', '/api/recurring/ignore', { merchant: 'basic fit', name: 'Basic-Fit' });
+  assert.ok(!(await names()).includes('basic fit'));
+  assert.deepEqual(JSON.parse(JSON.stringify(await api('GET', '/api/recurring/ignored'))), [{ merchant: 'basic fit', name: 'Basic-Fit' }]);
+  await api('POST', '/api/recurring/ignore', { merchant: 'basic fit', ignore: false });
+  assert.ok((await names()).includes('basic fit'));
+});

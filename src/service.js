@@ -127,7 +127,8 @@ export function createApi(db, ctx = {}) {
     const rows = q(`SELECT t.merchant, t.payee, t.date, t.amount, t.category_id FROM transactions t LEFT JOIN categories c ON c.id=t.category_id
       WHERE t.amount<0 AND (c.id IS NULL OR (c.kind='expense' AND COALESCE(c.key,'') NOT IN ('groceries','dining','drugstore','fuel','shopping','cash','transit','leisure'))) AND t.merchant<>'' AND t.date >= date((SELECT MAX(date) FROM transactions), '-18 months')`);
     const latest = one('SELECT MAX(date) d FROM transactions').d;
-    return latest ? detectRecurring(rows, latest) : [];
+    const ignored = new Set(q('SELECT merchant FROM ignored_recurring').map(r => r.merchant));
+    return latest ? detectRecurring(rows.filter(r => !ignored.has(r.merchant)), latest) : [];
   }
 
   function insights(m, d) {
@@ -506,6 +507,14 @@ export function createApi(db, ctx = {}) {
     'GET /api/dashboard': (_, __, u) => { let m = u.searchParams.get('month'); if (!monthRe.test(m || '')) m = latestMonth(); return dashboard(m); },
     'GET /api/report': (_, __, u) => { let m = u.searchParams.get('month'); if (!monthRe.test(m || '')) m = latestMonth(); return report(m, Math.min(24, Number(u.searchParams.get('months')) || 12)); },
     'GET /api/recurring': () => recurring(),
+    // "Geen vaste last": zet een foutief herkende terugkerende betaling weg (en herstel)
+    'GET /api/recurring/ignored': () => q('SELECT merchant, name FROM ignored_recurring ORDER BY name'),
+    'POST /api/recurring/ignore': b => {
+      if (!b.merchant) throw httpErr(400, 'merchant vereist');
+      if (b.ignore === false) run('DELETE FROM ignored_recurring WHERE merchant=?', b.merchant);
+      else run('INSERT OR REPLACE INTO ignored_recurring (merchant, name) VALUES (?,?)', b.merchant, String(b.name || b.merchant));
+      return { ok: true };
+    },
     'GET /api/export': () => {
       const rows = q(`SELECT t.date, t.amount, t.payee, t.description, COALESCE(c.name,'') cat, t.account, t.counter_iban, t.notes FROM transactions t LEFT JOIN categories c ON c.id=t.category_id ORDER BY t.date, t.id`);
       const qt = v => `"${String(v ?? '').replace(/"/g, '""')}"`;

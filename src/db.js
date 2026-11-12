@@ -61,6 +61,7 @@ function migrate(db) {
   addCol('transactions', 'confirmed', 'INTEGER NOT NULL DEFAULT 0');
   addCol('transactions', 'notes', "TEXT NOT NULL DEFAULT ''");
   addCol('transactions', 'import_id', 'INTEGER');
+  db.exec(`CREATE TABLE IF NOT EXISTS ignored_recurring (merchant TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '')`);
   db.exec(`CREATE TABLE IF NOT EXISTS imports (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '', created TEXT NOT NULL DEFAULT (datetime('now')),
     added INTEGER NOT NULL DEFAULT 0, from_date TEXT, to_date TEXT
