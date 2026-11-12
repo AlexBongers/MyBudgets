@@ -23,7 +23,16 @@ async function catTab() {
     const id = +tr.dataset.id;
     tr.addEventListener('change', guard(async e => { const f = e.target.dataset.f; if (!f) return; await PUT('/categories/' + id, { [f]: e.target.value }); await refreshMeta(); toast('Opgeslagen'); }));
     tr.querySelector('[data-del]').addEventListener('click', guard(async () => {
-      if (await ask('Categorie verwijderen?', `“${esc(catById(id).name)}” wordt verwijderd. Bijbehorende transacties komen terug in “Te beoordelen”; budgetten, regels en geheugen voor deze categorie verdwijnen.`, 'Verwijderen', true)) { await DEL('/categories/' + id); await refreshMeta(); V.categories(); }
+      const c = catById(id), others = S.cats.filter(x => x.kind === c.kind && x.id !== id);
+      const n = (await GET('/transactions?category=' + id + '&limit=1')).total;
+      const m = modal(`<h3>“${esc(c.name)}” verwijderen</h3><p class="muted" style="margin-top:-4px">${n} transactie${n === 1 ? '' : 's'} in deze categorie. Wat moet ermee gebeuren?</p>
+        <div class="form"><label>Verplaats naar</label><select id="mt"><option value="">— niets: terug naar “Te beoordelen” —</option>${others.map(o => `<option value="${o.id}">${o.icon} ${esc(o.name)}</option>`).join('')}</select></div>
+        <p class="muted small">Bij verplaatsen gaan ook regels, geheugen en budgetten mee (samenvoegen). Anders verdwijnen die voor deze categorie.</p>
+        <div class="foot"><button class="btn" data-close>Annuleren</button><button class="btn danger" id="go">Verwijderen</button></div>`);
+      m.$('#go').onclick = guard(async () => {
+        const target = m.$('#mt').value;
+        await DEL('/categories/' + id + (target ? '?merge=' + target : '')); m.close(); await refreshMeta(); toast(target ? 'Categorieën samengevoegd' : 'Categorie verwijderd'); V.categories();
+      });
     }));
   });
   $('#newcat').addEventListener('submit', guard(async e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); await POST('/categories', f); await refreshMeta(); toast('Categorie toegevoegd'); V.categories(); }));

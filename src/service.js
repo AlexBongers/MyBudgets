@@ -306,7 +306,27 @@ export function createApi(db, ctx = {}) {
         b.name?.trim() ?? null, b.kind ?? null, b.color ?? null, b.icon ?? null, b.grp ?? null, b.rollover == null ? null : (b.rollover ? 1 : 0), id);
       return { ok: true };
     },
-    'DELETE /api/categories/:id': (_, { id }) => {
+    // ?merge=ID verhuist transacties, splitsingen, regels, geheugen en budgetten naar die categorie (zelfde soort) voordat de categorie verdwijnt
+    'DELETE /api/categories/:id': (_, { id }, u) => {
+      const target = Number(u.searchParams.get('merge')) || null;
+      if (target) {
+        const from = one('SELECT kind FROM categories WHERE id=?', id), to = one('SELECT kind FROM categories WHERE id=?', target);
+        if (!from || !to) throw httpErr(404, 'Categorie niet gevonden');
+        if (target === id) throw httpErr(400, 'Kies een andere categorie');
+        if (from.kind !== to.kind) throw httpErr(400, 'Samenvoegen kan alleen met een categorie van dezelfde soort');
+        db.exec('BEGIN');
+        try {
+          run('UPDATE transactions SET category_id=? WHERE category_id=?', target, id);
+          run('UPDATE splits SET category_id=? WHERE category_id=?', target, id);
+          run('UPDATE rules SET category_id=? WHERE category_id=?', target, id);
+          for (const m of q('SELECT key, n, label FROM memory WHERE category_id=?', id))
+            run('INSERT INTO memory (key, category_id, n, label) VALUES (?,?,?,?) ON CONFLICT(key, category_id) DO UPDATE SET n = n + excluded.n', m.key, target, m.n, m.label);
+          run('UPDATE OR IGNORE budgets SET category_id=? WHERE category_id=?', target, id); // bestaand budget van het doel wint
+          run('DELETE FROM categories WHERE id=?', id);
+          db.exec('COMMIT');
+        } catch (e) { db.exec('ROLLBACK'); throw e; }
+        return { ok: true, merged: true };
+      }
       run("UPDATE transactions SET confirmed=0, cat_source=NULL, cat_conf=0, cat_reason='' WHERE category_id=?", id);
       run('DELETE FROM categories WHERE id=?', id); recategorize(db); return { ok: true };
     },

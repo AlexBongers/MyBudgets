@@ -279,3 +279,20 @@ test('budget-overdracht (rollover): niet-bestede ruimte schuift door, overschrij
   assert.equal((await at('2026-03')).carry, 4000 + (10000 - 13000)); // februari 30 te veel: 40 - 30 = 10 over
   assert.equal((await at('2026-03')).limit, 10000 + 1000);
 });
+
+test('categorie samenvoegen verhuist transacties, regels, geheugen en budgetten', async () => {
+  const { createApi } = await import('../src/service.js');
+  const db = openDb(':memory:'); const api = createApi(db);
+  importTransactions(db, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  const d = id('dining'), g = id('groceries');
+  const nDining = db.prepare('SELECT COUNT(*) c FROM transactions WHERE category_id=?').get(d).c;
+  const nGroc = db.prepare('SELECT COUNT(*) c FROM transactions WHERE category_id=?').get(g).c;
+  await api('POST', '/api/rules', { field: 'payee', op: 'contains', pattern: 'pizzeria', category_id: d });
+  await api('PUT', '/api/budget', { category_id: d, month: '2026-10', amount: 20000 });
+  await assert.rejects(() => api('DELETE', `/api/categories/${d}?merge=${id('salary')}`), /dezelfde soort/);
+  await api('DELETE', `/api/categories/${d}?merge=${g}`);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM transactions WHERE category_id=?').get(g).c, nGroc + nDining);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM categories WHERE id=?').get(d).c, 0);
+  assert.equal(db.prepare('SELECT category_id FROM rules WHERE pattern=?').get('pizzeria').category_id, g);
+  assert.equal(db.prepare('SELECT amount FROM budgets WHERE category_id=? AND month=?').get(g, '2026-10').amount, 20000);
+});
