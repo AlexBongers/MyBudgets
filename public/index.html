@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyBudgets</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>MyBudgets</h1>
+  <nav id="nav">
+    <button data-tab="dashboard" class="active">Dashboard</button>
+    <button data-tab="transactions">Transacties</button>
+    <button data-tab="budget">Budget</button>
+    <button data-tab="categories">Categorieën &amp; regels</button>
+    <button data-tab="import">Importeren</button>
+  </nav>
+  <div class="monthpick" id="monthpick">
+    <button id="prev" aria-label="Vorige maand">‹</button>
+    <span id="monthlabel"></span>
+    <button id="next" aria-label="Volgende maand">›</button>
+  </div>
+</header>
+<main id="main"></main>
+<div id="toast" role="status"></div>
+<script src="app.js" type="module"></script>
+</body>
+</html>

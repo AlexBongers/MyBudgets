@@ -1,0 +1,8 @@
+{
+  "name": "mybudgets",
+  "version": "1.0.0",
+  "description": "Eenvoudige, lokale budget-app voor persoonlijk gebruik (Rabobank CSV import)",
+  "type": "module",
+  "scripts": { "start": "node server.js", "test": "node test.js" },
+  "engines": { "node": ">=22.13" }
+}
