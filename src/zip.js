@@ -34,3 +34,21 @@ export function readZip(buf) {
   }
   return out;
 }
+
+// Eenvoudige ZIP-schrijver (deflate), voor demo's en tests.
+import { deflateRawSync } from 'node:zlib';
+const CRC = (() => { const t = new Int32Array(256).map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; }); return b => { let c = -1; for (const x of b) c = t[(c ^ x) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; }; })();
+export function writeZip(files) {
+  const parts = [], central = []; let off = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const data = Buffer.isBuffer(content) ? content : Buffer.from(content), nb = Buffer.from(name), comp = deflateRawSync(data), crc = CRC(data);
+    const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0x0800, 6); lh.writeUInt16LE(8, 8); lh.writeUInt32LE(crc, 14);
+    lh.writeUInt32LE(comp.length, 18); lh.writeUInt32LE(data.length, 22); lh.writeUInt16LE(nb.length, 26); parts.push(lh, nb, comp);
+    const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(0x0800, 8); ch.writeUInt16LE(8, 10);
+    ch.writeUInt32LE(crc, 16); ch.writeUInt32LE(comp.length, 20); ch.writeUInt32LE(data.length, 24); ch.writeUInt16LE(nb.length, 28); ch.writeUInt32LE(off, 42);
+    central.push(ch, nb); off += 30 + nb.length + comp.length;
+  }
+  const cd = Buffer.concat(central), eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(central.length / 2, 8); eocd.writeUInt16LE(central.length / 2, 10); eocd.writeUInt32LE(cd.length, 12); eocd.writeUInt32LE(off, 16);
+  return Buffer.concat([...parts, cd, eocd]);
+}

@@ -144,8 +144,10 @@ V.import = async () => {
   const m = render(`<div class="grid g21"><div class="stack">
     <div class="dz" id="dz"><div style="font-size:34px">📥</div><b style="color:var(--text)">Sleep je Rabobank CSV hierheen</b><br>of klik om een bestand te kiezen <span class="faint">(⌘O)</span>
       <input type="file" id="file" accept=".csv,.txt,text/csv" multiple hidden></div><div id="importres" class="stack"></div></div>
+    <div class="card"><h2>Komen je gegevens uit Notion?</h2><p class="muted small" style="margin-top:0">Importeer je bestaande Notion-budget (ZIP of CSV): transacties, categorieën en budgetten, met voorbeeld vooraf.</p><button class="btn" id="tonotion">🗂️ Importeren uit Notion…</button></div>
     <div class="card"><h2>Exporteren uit Rabo Internetbankieren</h2><ol class="steps"><li>Log in op <b>Rabo Internetbankieren</b> en open je rekening.</li><li>Ga naar <b>Transacties</b> en kies <b>Downloaden</b>.</li><li>Kies de periode en als formaat <b>CSV</b> (kommagescheiden).</li><li>Importeer het bestand hier. Overlappende periodes zijn geen probleem: dubbele transacties worden overgeslagen.</li></ol>
       <hr><p class="muted small" style="margin:0">Tip: importeer ook je spaarrekening, dan herkent MyBudgets overboekingen tussen je eigen rekeningen automatisch.</p></div></div>`);
+  $('#tonotion')?.addEventListener('click', () => go('notion'));
   const dz = $('#dz');
   dz.addEventListener('click', guard(async () => { if (window.native) importFiles(await window.native.openCSV()); else $('#file').click(); }));
   $('#file').addEventListener('change', guard(async e => importFiles(await Promise.all([...e.target.files].map(async f => ({ name: f.name, base64: await readFileBase64(f) }))))));

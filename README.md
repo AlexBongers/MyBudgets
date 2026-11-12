@@ -29,6 +29,15 @@ periodes zijn dus geen probleem. Importeer ook je spaarrekening: dan worden over
 rekeningen herkend en tellen ze niet mee als uitgave. Elke import staat in de **importgeschiedenis**
 (Instellingen) en is met één klik terug te draaien.
 
+### Importeren uit Notion
+
+Bestand → **Importeren uit Notion…** (of sleep een `.zip` in het venster). Exporteer in Notion via ⋯ → Export → *Markdown & CSV* (met subpagina's voor meerdere databases). De importer
+(`src/notion.js`) leest de ZIP (ook geneste ZIP's en `_all.csv`), herkent per tabel of het transacties of budgetten zijn, raadt de kolommen op naam én op waarden, en begrijpt
+NL- en EN-datums (“12 november 2026”, “November 12, 2026 → …”), bedragen (`€1.234,56`, `-€1,234.50`, `(12,00)`), relaties met URL's, aparte uitgaven-/inkomstenkolommen en Type-kolommen.
+Je ziet altijd eerst een **voorbeeld** en kunt kolommen, tekens, datum- en decimaalnotatie en de **categorie-koppeling** aanpassen. Er wordt pas geschreven na “Importeren”.
+Staan dezelfde transacties al in MyBudgets (bijv. uit je Rabobank-import; zelfde bedrag, datum ±3 dagen), dan worden ze **verrijkt** met de Notion-categorie in plaats van dubbel te worden,
+en leert de app van elke indeling. Opnieuw importeren voegt niets dubbel toe; elke import is terug te draaien. Een voorbeeldexport staat in `samples/notion-demo.zip`.
+
 ### Parser
 
 `src/rabobank.js` is overgenomen uit je eigen repo `actual-budget-mcp` (`src/rabobank.ts`) en getest met dezelfde

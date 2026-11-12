@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('native', {
     return r.data;
   },
   openCSV: () => ipcRenderer.invoke('dialog:open'),
+  openNotion: () => ipcRenderer.invoke('dialog:open-notion'),
   saveFile: (name, text) => ipcRenderer.invoke('dialog:save', name, text),
   backup: () => ipcRenderer.invoke('db:backup'),
   restore: () => ipcRenderer.invoke('db:restore'),

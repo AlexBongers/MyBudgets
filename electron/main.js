@@ -59,6 +59,10 @@ ipcMain.handle('api', async (_e, method, url, body) => {
   try { return { data: await api(method, url, body || {}) }; }
   catch (e) { return { __error: true, status: e.status || 500, message: e.message }; }
 });
+ipcMain.handle('dialog:open-notion', async () => {
+  const r = await dialog.showOpenDialog(win, { title: 'Notion-export kiezen', properties: ['openFile'], filters: [{ name: 'Notion-export (ZIP of CSV)', extensions: ['zip', 'csv'] }] });
+  return r.canceled ? [] : r.filePaths.map(p => ({ name: basename(p), base64: readFileSync(p).toString('base64') }));
+});
 ipcMain.handle('dialog:open', async () => {
   const r = await dialog.showOpenDialog(win, { title: 'Rabobank CSV kiezen', properties: ['openFile', 'multiSelections'], filters: [{ name: 'CSV', extensions: ['csv', 'txt'] }] });
   return r.canceled ? [] : r.filePaths.map(readCSV);
@@ -130,6 +134,7 @@ function buildMenu() {
     ...(isMac ? [{ label: app.name, submenu: [{ role: 'about', label: 'Over MyBudgets' }, { type: 'separator' }, { role: 'services', label: 'Services' }, { type: 'separator' }, { role: 'hide', label: 'Verberg MyBudgets' }, { role: 'hideOthers', label: 'Verberg andere' }, { role: 'unhide', label: 'Toon alles' }, { type: 'separator' }, { role: 'quit', label: 'Stop MyBudgets' }] }] : []),
     { label: 'Bestand', submenu: [
       { label: 'Rabobank CSV importeren…', accelerator: 'CmdOrCtrl+O', click: () => send({ action: 'import-dialog' }) },
+      { label: 'Importeren uit Notion…', click: () => send({ action: 'notion' }) },
       { label: 'Transacties exporteren (CSV)…', accelerator: 'CmdOrCtrl+Shift+E', click: () => send({ action: 'export' }) },
       { label: 'Dit scherm exporteren als PDF…', accelerator: 'CmdOrCtrl+P', click: () => send({ action: 'pdf' }) },
       { type: 'separator' },

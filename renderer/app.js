@@ -4,8 +4,8 @@ const TABS = [
   ['dashboard', 'Dashboard'], ['review', 'Te beoordelen'], ['transactions', 'Transacties'], ['budget', 'Budget'],
   ['recurring', 'Vaste lasten'], ['reports', 'Rapporten'], ['categories', 'Categorieën & regels'],
 ];
-const TITLES = Object.fromEntries([...TABS, ['import', 'Importeren'], ['settings', 'Instellingen'], ['detail', 'Overzicht']]);
-const NOMONTH = ['categories', 'import', 'settings', 'recurring', 'review'];
+const TITLES = Object.fromEntries([...TABS, ['import', 'Importeren'], ['settings', 'Instellingen'], ['detail', 'Overzicht'], ['notion', 'Importeren uit Notion']]);
+const NOMONTH = ['categories', 'import', 'settings', 'recurring', 'review', 'notion'];
 
 function updateNav() {
   $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" ${S.tab === k ? 'aria-current="page"' : ''} data-tab="${k}">${icon(k)}<span>${l}</span>${k === 'review' && S.review ? `<span class="badge">${S.review}</span>` : ''}</button>`).join('')
@@ -69,6 +69,7 @@ if (window.native) {
     else if (m.action === 'restore') window.native.restore();
     else if (m.action === 'undo') { if (document.activeElement?.matches('input,textarea')) document.execCommand('undo'); else doUndo(); }
     else if (m.action === 'palette') openPalette();
+    else if (m.action === 'notion') go('notion');
     else if (m.action === 'search') { S.txFilter = { focusSearch: true }; go('transactions'); }
   }));
 }
@@ -80,8 +81,12 @@ window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth =
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', guard(async e => {
   e.preventDefault(); dragDepth = 0; $('#dropov')?.remove();
-  const files = [...(e.dataTransfer?.files || [])].filter(f => /\.(csv|txt)$/i.test(f.name));
-  if (!files.length) return toast('Sleep een .csv-bestand uit Rabo Internetbankieren');
+  const all = [...(e.dataTransfer?.files || [])];
+  // ZIP (of alles terwijl de Notion-wizard open staat) = Notion-export; anders Rabobank-CSV
+  const nf = all.find(f => /\.zip$/i.test(f.name)) || (S.tab === 'notion' ? all.find(f => /\.(csv|txt)$/i.test(f.name)) : null);
+  if (nf) return loadNotionFile({ name: nf.name, base64: await readFileBase64(nf) });
+  const files = all.filter(f => /\.(csv|txt)$/i.test(f.name));
+  if (!files.length) return toast('Sleep een .csv-bestand uit Rabo Internetbankieren of een .zip-export uit Notion');
   importFiles(await Promise.all(files.map(async f => ({ name: f.name, base64: await readFileBase64(f) }))));
 }));
 

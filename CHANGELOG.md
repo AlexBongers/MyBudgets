@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.2.0
+- **Notion-importer**: ZIP/CSV-export lezen, automatische kolom- en formaatherkenning (NL/EN), voorbeeld vooraf, categorie-koppeling, budgetten, verrijken van bestaande transacties, herhaald importeren zonder dubbelen.
+
 ## 2.1.0
 
 **Categoriseren**
