@@ -72,8 +72,18 @@ function modal(html, { wide } = {}) {
   const root = $('#modal-root');
   const el = document.createElement('div'); el.className = 'overlay';
   el.innerHTML = `<div class="modal" ${wide ? 'style="width:min(760px,94vw)"' : ''} role="dialog" aria-modal="true">${html}</div>`;
-  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = e => { if (e.key === 'Escape') close(); };
+  const opener = document.activeElement; // na sluiten keert de focus daarheen terug
+  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); if (opener && opener.isConnected && opener.focus) opener.focus(); };
+  const onKey = e => {
+    if (e.key === 'Escape') return close();
+    if (e.key !== 'Tab') return;
+    // Tab blijft binnen het dialoog
+    const f = [...el.querySelectorAll('button,input,select,textarea,a[href],[tabindex]:not([tabindex="-1"])')].filter(n => !n.disabled && n.offsetParent !== null);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
   document.addEventListener('keydown', onKey);
   el.addEventListener('mousedown', e => { if (e.target === el) close(); });
   root.appendChild(el);

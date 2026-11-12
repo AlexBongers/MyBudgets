@@ -47,6 +47,8 @@ function lineChart({ month, prev, days }, budget, projection) {
   s += `<path d="${path(prev)}" fill="none" stroke="var(--faint)" stroke-width="2" stroke-dasharray="4 4"/>`;
   if (projection && month.length) s += `<path d="M${x(month.length - 1).toFixed(1)} ${y(month[month.length - 1]).toFixed(1)}L${x(days - 1).toFixed(1)} ${y(projection).toFixed(1)}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="2 4" opacity=".7"/>`;
   s += `<path d="${path(month)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`;
+  // onzichtbare raakpunten per dag voor tooltips (deze maand t.o.v. vorige maand)
+  for (let i = 0; i < Math.max(month.length, 0); i++) s += `<circle cx="${x(i).toFixed(1)}" cy="${y(month[i]).toFixed(1)}" r="7" fill="transparent"><title>Dag ${i + 1}: ${eur(month[i])}${prev[i] != null ? ` · vorige maand ${eur(prev[i])}` : ''}</title></circle>`;
   if (month.length) s += `<circle cx="${x(month.length - 1)}" cy="${y(month[month.length - 1])}" r="4" fill="var(--accent)"/>`;
   return s + '</svg>';
 }
