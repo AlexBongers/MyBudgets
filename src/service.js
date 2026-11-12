@@ -217,6 +217,15 @@ export function createApi(db, ctx = {}) {
 
   const routes = {
     'GET /api/detail': (_, __, u) => detail(u),
+    'GET /api/search': (_, __, u) => {
+      const term = (u.searchParams.get('q') || '').trim();
+      if (term.length < 2) return { merchants: [], transactions: [] };
+      const like = `%${term}%`;
+      return {
+        merchants: q(`SELECT merchant, MAX(payee) name, COUNT(*) n, SUM(amount) total FROM transactions WHERE (payee LIKE ? OR merchant LIKE ?) AND merchant<>'' GROUP BY merchant ORDER BY n DESC LIMIT 6`, like, like),
+        transactions: q(`SELECT id, date, amount, payee, description FROM transactions WHERE payee LIKE ? OR description LIKE ? ORDER BY date DESC LIMIT 6`, like, like),
+      };
+    },
     'GET /api/categories': () => q(`SELECT c.* FROM categories c ORDER BY CASE c.kind WHEN 'income' THEN 0 WHEN 'expense' THEN 1 ELSE 2 END, ${GRP_ORDER}, c.grp, c.name`),
     'POST /api/categories': b => {
       if (!b.name?.trim()) throw httpErr(400, 'Naam ontbreekt');

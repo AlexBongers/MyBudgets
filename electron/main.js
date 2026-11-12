@@ -86,7 +86,7 @@ function buildMenu() {
       { label: 'Back-up herstellen…', click: () => send({ action: 'restore' }) },
       { type: 'separator' }, isMac ? { role: 'close', label: 'Sluit venster' } : { role: 'quit', label: 'Afsluiten' }] },
     { label: 'Bewerken', submenu: [{ label: 'Ongedaan maken', accelerator: 'CmdOrCtrl+Z', click: () => send({ action: 'undo' }) }, { role: 'redo', label: 'Opnieuw' }, { type: 'separator' }, { role: 'cut', label: 'Knip' }, { role: 'copy', label: 'Kopieer' }, { role: 'paste', label: 'Plak' }, { role: 'selectAll', label: 'Selecteer alles' },
-      { type: 'separator' }, { label: 'Zoeken in transacties', accelerator: 'CmdOrCtrl+F', click: () => send({ action: 'search' }) }] },
+      { type: 'separator' }, { label: 'Zoek en ga naar…', accelerator: 'CmdOrCtrl+K', click: () => send({ action: 'palette' }) }, { label: 'Zoeken in transacties', accelerator: 'CmdOrCtrl+F', click: () => send({ action: 'search' }) }] },
     { label: 'Weergave', submenu: [
       nav('Dashboard', 'dashboard', 1), nav('Te beoordelen', 'review', 2), nav('Transacties', 'transactions', 3), nav('Budget', 'budget', 4),
       nav('Vaste lasten', 'recurring', 5), nav('Rapporten', 'reports', 6), nav('Categorieën & regels', 'categories', 7), { type: 'separator' },

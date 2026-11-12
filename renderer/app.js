@@ -43,8 +43,10 @@ $('#prev').onclick = () => stepMonth(-1);
 $('#next').onclick = () => stepMonth(1);
 $('#monthlabel').onclick = () => { S.month = S.months[0] || S.month; go(S.tab); };
 $('#importbtn').onclick = () => go('import');
+$('#palettebtn').onclick = () => openPalette();
 
 // Sneltoetsen (in Electron komen ze via het menu; dit is de browser-fallback)
+document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPalette(); } });
 if (!window.native) document.addEventListener('keydown', e => {
   if (!(e.metaKey || e.ctrlKey) || e.target.matches('input,textarea,select')) return;
   const n = Number(e.key); if (n >= 1 && n <= 7) { e.preventDefault(); S.txFilter = {}; go(TABS[n - 1][0]); }
@@ -62,6 +64,7 @@ if (window.native) {
     else if (m.action === 'backup') { if (await window.native.backup()) toast('Back-up gemaakt'); }
     else if (m.action === 'restore') window.native.restore();
     else if (m.action === 'undo') { if (document.activeElement?.matches('input,textarea')) document.execCommand('undo'); else doUndo(); }
+    else if (m.action === 'palette') openPalette();
     else if (m.action === 'search') { S.txFilter = { focusSearch: true }; go('transactions'); }
   }));
 }
