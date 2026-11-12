@@ -2,10 +2,10 @@
 // Shell: navigatie, maandkiezer, sneltoetsen, menu-events, slepen-en-neerzetten.
 const TABS = [
   ['dashboard', 'Dashboard'], ['review', 'Te beoordelen'], ['transactions', 'Transacties'], ['budget', 'Budget'],
-  ['recurring', 'Vaste lasten'], ['reports', 'Rapporten'], ['categories', 'Categorieën & regels'],
+  ['recurring', 'Vaste lasten'], ['reports', 'Rapporten'], ['year', 'Jaaroverzicht'], ['categories', 'Categorieën & regels'],
 ];
 const TITLES = Object.fromEntries([...TABS, ['import', 'Importeren'], ['settings', 'Instellingen'], ['detail', 'Overzicht'], ['actual', 'Importeren uit Actual Budget']]);
-const NOMONTH = ['categories', 'import', 'settings', 'recurring', 'review', 'actual'];
+const NOMONTH = ['categories', 'import', 'settings', 'recurring', 'review', 'actual', 'year'];
 
 function updateNav() {
   $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" ${S.tab === k ? 'aria-current="page"' : ''} data-tab="${k}">${icon(k)}<span>${l}</span>${k === 'review' && S.review ? `<span class="badge">${S.review}</span>` : ''}</button>`).join('')
@@ -52,7 +52,7 @@ $('#palettebtn').onclick = () => openPalette();
 document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); openPalette(); } });
 if (!window.native) document.addEventListener('keydown', e => {
   if (!(e.metaKey || e.ctrlKey) || e.target.matches('input,textarea,select')) return;
-  const n = Number(e.key); if (n >= 1 && n <= 7) { e.preventDefault(); S.txFilter = {}; go(TABS[n - 1][0]); }
+  const n = Number(e.key); if (n >= 1 && n <= 8) { e.preventDefault(); S.txFilter = {}; go(TABS[n - 1][0]); }
   if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
   if (e.key === '[') stepMonth(-1); if (e.key === ']') stepMonth(1);
 });

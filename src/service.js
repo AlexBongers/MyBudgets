@@ -15,7 +15,7 @@ export { httpErr };
 
 export function createApi(db, ctx = {}) {
   const R = createReports(db);
-  const { q, one, latestMonth, budgetRows, accounts, recurring, dashboard, report, detail, listTransactions, review } = R;
+  const { q, one, latestMonth, budgetRows, accounts, recurring, dashboard, report, detail, listTransactions, review, yearOverview } = R;
   const run = (sql, ...p) => db.prepare(sql).run(...p);
   // Laatste 30 wijzigingen kunnen ongedaan worden gemaakt (in het geheugen, per sessie)
   const undoStack = new Map(); let undoSeq = 0;
@@ -282,6 +282,7 @@ export function createApi(db, ctx = {}) {
     },
 
     'GET /api/dashboard': (_, __, u) => { let m = u.searchParams.get('month'); if (!monthRe.test(m || '')) m = latestMonth(); return dashboard(m); },
+    'GET /api/year': (_, __, u) => yearOverview(u.searchParams.get('year')),
     'GET /api/report': (_, __, u) => { let m = u.searchParams.get('month'); if (!monthRe.test(m || '')) m = latestMonth(); return report(m, Math.min(24, Number(u.searchParams.get('months')) || 12)); },
     'GET /api/recurring': () => recurring(),
     // "Geen vaste last": zet een foutief herkende terugkerende betaling weg (en herstel)

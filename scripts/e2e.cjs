@@ -30,6 +30,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
   await win.click('#fill'); await win.waitForTimeout(500); ok('budget aanvullen met gemiddelde', (await win.locator('input[data-cat]').evaluateAll(a => a.filter(i => Number(i.value) > 0).length)) > 0);
 
   await win.click('[data-tab=recurring]'); await win.waitForSelector('tr[data-m]'); ok('vaste lasten herkend', (await win.locator('tr[data-m]').count()) >= 8);
+  await win.click('[data-tab=year]'); await win.waitForSelector('#yseg'); ok('jaaroverzicht toont maandgrafiek en categorieën', (await win.locator('#main svg').count()) >= 2 && (await win.innerText('#main')).includes('Uitgaven per categorie'));
   await win.click('[data-tab=reports]'); await win.waitForSelector('.heat'); ok('rapport toont spaarquote', (await win.innerText('.heat')).includes('Spaarquote'));
 
   // Actual-import via de native bestandsdialoog (gestubd): kies de bestaande rekening, bestaande Rabobank-transacties worden verrijkt

@@ -271,5 +271,32 @@ export function createReports(db) {
   }
 
 
-  return { q, one, latestMonth, totalsByMonth, monthTotals, spentByCat, budgetRows, accounts, balanceHistory, recurring, insights, dashboard, listTransactions, review, report, detail };
+  // Jaaroverzicht. Is het jaar nog niet af (laatste transactie ligt erin), dan vergelijken we met dezelfde periode van het vorige jaar.
+  function yearOverview(yearParam) {
+    const years = q('SELECT DISTINCT substr(ym,1,4) y FROM transactions ORDER BY y DESC').map(r => r.y);
+    const latest = one('SELECT MAX(date) d FROM transactions').d;
+    const year = /^\d{4}$/.test(yearParam || '') ? yearParam : (years[0] || todayStr().slice(0, 4));
+    const full = `${year}-12-31`, to = latest && latest.slice(0, 4) === year && latest < full ? latest : full, from = `${year}-01-01`;
+    const pFrom = `${year - 1}-01-01`, pTo = `${year - 1}${to.slice(4)}`;
+    const base = `FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE t.date>=? AND t.date<=?`;
+    const totals = (a, b) => one(`SELECT COALESCE(SUM(CASE WHEN ${INCOME} THEN t.amount END),0) income, COALESCE(-SUM(CASE WHEN ${EXPENSE} THEN t.amount END),0) expenses ${base}`, a, b);
+    const catRows = (a, b) => q(`SELECT c.id, COALESCE(c.name,'Niet gecategoriseerd') name, COALESCE(c.color,'#9ca3af') color, COALESCE(c.icon,'❔') icon, -SUM(t.amount) value ${base} AND ${EXPENSE} GROUP BY c.id HAVING value > 0 ORDER BY value DESC`, a, b);
+    const prevByCat = Object.fromEntries(catRows(pFrom, pTo).map(r => [r.id, r.value]));
+    const byCategory = catRows(from, to).map(c => ({ ...c, prev: prevByCat[c.id] ?? 0 }));
+    const income = q(`SELECT c.id, COALESCE(c.name,'Niet gecategoriseerd') name, COALESCE(c.color,'#9ca3af') color, COALESCE(c.icon,'❔') icon, SUM(t.amount) value ${base} AND ${INCOME} GROUP BY c.id HAVING value > 0 ORDER BY value DESC`, from, to);
+    const topPayees = q(`SELECT MAX(t.payee) payee, t.merchant, MAX(COALESCE(c.icon,'❔')) icon, -SUM(t.amount) value, COUNT(*) n ${base} AND ${EXPENSE} GROUP BY t.merchant HAVING value > 0 ORDER BY value DESC LIMIT 10`, from, to);
+    const biggest = q(`SELECT t.id, t.date, t.payee, -t.amount value, COALESCE(c.icon,'❔') icon, COALESCE(c.name,'Niet gecategoriseerd') category ${base} AND ${EXPENSE} ORDER BY t.amount ASC LIMIT 10`, from, to);
+    // verloop door het jaar voor de grootste uitgavecategorieën: 12 maandwaarden per categorie
+    const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`), top = byCategory.filter(c => c.id != null).slice(0, 8);
+    const catMonths = top.length ? Object.fromEntries(top.map(c => [c.id, Array(12).fill(0)])) : {};
+    if (top.length) for (const r of q(`SELECT t.category_id id, t.ym mo, -SUM(t.amount) v FROM tl t WHERE t.date>=? AND t.date<=? AND t.category_id IN (${top.map(() => '?').join(',')}) GROUP BY t.category_id, t.ym`, from, to, ...top.map(c => c.id))) catMonths[r.id][months.indexOf(r.mo)] = r.v;
+    return {
+      year, years, from, to, partial: to !== full, totals: totals(from, to), prevTotals: totals(pFrom, pTo),
+      // alleen vergelijken als het vorige jaar (vrijwel) vanaf het begin data heeft; anders is een verschil misleidend
+      prevComplete: (one('SELECT MIN(date) d FROM transactions WHERE date>=? AND date<=?', pFrom, pTo).d || '9') <= `${year - 1}-01-31`, months: totalsByMonth(months),
+      byCategory, income, topPayees, biggest, catMonths, txCount: one(`SELECT COUNT(*) c FROM transactions WHERE date>=? AND date<=?`, from, to).c,
+    };
+  }
+
+  return { q, one, latestMonth, totalsByMonth, monthTotals, spentByCat, budgetRows, accounts, balanceHistory, recurring, insights, dashboard, listTransactions, review, report, detail, yearOverview };
 }

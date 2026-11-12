@@ -53,6 +53,12 @@ function lineChart({ month, prev, days }, budget, projection) {
   return s + '</svg>';
 }
 
+function sparkline(values, w = 90, h = 24, color = 'var(--accent)') {
+  const max = Math.max(1, ...values), n = values.length;
+  const pts = values.map((v, i) => `${(i / (n - 1) * (w - 2) + 1).toFixed(1)},${(h - 2 - (h - 4) * v / max).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
 function progressBar(spent, budget) {
   const p = budget ? Math.min(100, Math.max(0, spent / budget * 100)) : 0;
   const col = !budget ? 'var(--faint)' : spent > budget ? 'var(--bad)' : spent > budget * .85 ? 'var(--warn)' : 'var(--good)';

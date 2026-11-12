@@ -10,7 +10,7 @@ Vereist [Node.js](https://nodejs.org) ≥ 22.13 (aanbevolen: LTS).
 ```bash
 npm install
 npm start          # opent de app
-npm test           # parser, categoriseermodule, corpus, service, server (66 tests)
+npm test           # parser, categoriseermodule, corpus, service, server (68 tests)
 npm run e2e        # doorloopt de echte app (17 controles, tijdelijke database)
 npm run dist       # bouwt dist/MyBudgets-*.dmg (Apple Silicon + Intel)
 ```
@@ -76,13 +76,14 @@ zodat "ALBERT HEIJN 1234 EINDHOVEN" en "Albert Heijn 5678" dezelfde tegenpartij 
 | **Budget** | per maand, gemiddelde van 3 maanden als hulp, overdragen (rollover) per categorie, beschikbaar bedrag |
 | **Vaste lasten** | automatisch herkende abonnementen en terugkerende betalingen (met ✕ weg te zetten) |
 | **Rapporten** | categorie × maand (6/12/24 maanden) met spaarquote |
+| **Jaaroverzicht** | een heel jaar in één scherm: kerncijfers met vergelijking met vorig jaar (zelfde periode), maandgrafiek, inkomsten per bron, uitgaven per categorie met verloop, top tegenpartijen en grootste uitgaven |
 | **Categorieën & regels** | categorieën (samenvoegen bij verwijderen), regels met live voorbeeld, regelsuggesties, geheugen |
 | **Overzicht** | drill-down per categorie of tegenpartij (klik op een categorie of tegenpartij) |
 | **Instellingen** | thema, rekeningen, back-up/herstel, CSV-export, importgeschiedenis |
 
 Verder: opdrachtpalet **⌘K**, meerdere rekeningen, donker/licht, native menu, onthoudt scherm, maand en venster.
 
-Sneltoetsen: ⌘O importeren · ⌘K zoeken/navigeren · ⌘1–7 schermen · ⌘[ ⌘] vorige/volgende maand · ⌘Z ongedaan maken · ⇧⌘E exporteren.
+Sneltoetsen: ⌘O importeren · ⌘K zoeken/navigeren · ⌘1–8 schermen · ⌘[ ⌘] vorige/volgende maand · ⌘Z ongedaan maken · ⇧⌘E exporteren.
 
 ## Privacy en beveiliging
 

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.5.0
+- **Jaaroverzicht**: kerncijfers, maandgrafiek, inkomsten per bron, uitgaven per categorie met verloop door het jaar, top tegenpartijen en grootste uitgaven. Vergelijkt alleen met vorig jaar als dat vanaf januari data heeft, en dan over dezelfde periode.
+
 ## 2.4.0
 - **Actual Budget-importer** (export-ZIP of `db.sqlite`): transacties, categorieën met groepen, rekeningen, overboekingen, splitsingen en budgetten (tracking/envelope), met voorbeeld vooraf, rekening- en categoriekoppeling, verrijken van bestaande transacties en leren van je indelingen.
 - Een latere Rabobank-CSV voor dezelfde rekening sluit aan op geïmporteerde transacties in plaats van dubbel te worden.

@@ -75,3 +75,29 @@ test('rekening hernoemen: lengte begrensd, lege naam wordt "Rekening"', async ()
   await api('PUT', '/api/accounts/' + id, { name: 'x'.repeat(200) }); assert.equal(db.prepare('SELECT name FROM accounts').get().name.length, 80);
   await api('PUT', '/api/accounts/' + id, { name: '   ' }); assert.equal(db.prepare('SELECT name FROM accounts').get().name, 'Rekening');
 });
+
+test('jaaroverzicht: totalen, vergelijking met dezelfde periode vorig jaar, categorieën en verloop', async () => {
+  const { api } = demo();
+  const y = await api('GET', '/api/year');                       // standaard: laatste jaar met data
+  assert.equal(y.year, '2026'); assert.deepEqual(y.years, ['2026', '2025']); assert.equal(y.partial, true); assert.equal(y.to, '2026-11-12');
+  assert.equal(y.months.length, 12); assert.equal(y.months[9].income, 315000);              // oktober: salaris
+  assert.equal(y.months.reduce((a, m) => a + m.expenses, 0), y.totals.expenses);
+  assert.equal(y.txCount, 454);
+  assert.ok(y.prevTotals.expenses > 0); assert.equal(y.prevComplete, false);                  // 2025 begint in de demo pas in september: geen eerlijke vergelijking
+  assert.equal(y.byCategory[0].name, 'Huur / hypotheek'); assert.ok(y.byCategory.reduce((a, c) => a + c.value, 0) >= y.totals.expenses);   // categorieën met netto-terugbetaling staan niet in de lijst
+  assert.equal(y.income[0].name, 'Salaris'); assert.equal(y.topPayees[0].payee, 'Woonbron'); assert.equal(y.biggest.length, 10);
+  const cm = y.catMonths[y.byCategory[0].id]; assert.equal(cm.length, 12); assert.equal(cm[0], 105000);
+  const old = await api('GET', '/api/year?year=2025'); assert.equal(old.prevComplete, false); assert.equal(old.partial, false); assert.equal(old.to, '2025-12-31');
+  assert.equal((await api('GET', '/api/year?year=abc')).year, '2026');                       // ongeldig → laatste jaar
+});
+
+test('jaaroverzicht: vergelijking met vorig jaar zodra dat vanaf januari data heeft (zelfde periode bij lopend jaar)', async () => {
+  const db = openDb(':memory:'), api = createApi(db);
+  const hdr = '"IBAN/BBAN","Munt","Volgnr","Datum","Bedrag","Naam tegenpartij","Omschrijving-1"';
+  const rows = [['2025-01-10', '-100,00'], ['2025-02-10', '-100,00'], ['2025-08-10', '-500,00'], ['2026-01-10', '-150,00'], ['2026-02-10', '-150,00']]
+    .map(([d, a], i) => `"NL01RABO0000000001","EUR","${i + 1}","${d}","${a}","Jumbo","x"`);
+  importTransactions(db, parseRabobank([hdr, ...rows].join('\n')));
+  const y = await api('GET', '/api/year?year=2026');
+  assert.equal(y.prevComplete, true); assert.equal(y.to, '2026-02-10');
+  assert.equal(y.totals.expenses, 30000); assert.equal(y.prevTotals.expenses, 20000);    // 2025 t/m 10 feb; de 500 in augustus telt niet mee
+});
