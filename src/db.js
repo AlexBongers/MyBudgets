@@ -162,11 +162,11 @@ export function loadCategorizer(db) {
   return new Categorizer({ categories, rules, memory, ownIbans, training, recurringIncome });
 }
 
-const tx = (db, fn) => { db.exec('BEGIN'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
+export const withTx = (db, fn) => { db.exec('BEGIN'); try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
 
 // ---------- importeren ----------
 export function importTransactions(db, parsed, meta = {}) {
-  return tx(db, () => {
+  return withTx(db, () => {
     const importId = Number(db.prepare('INSERT INTO imports (name) VALUES (?)').run(String(meta.name || '').slice(0, 200)).lastInsertRowid);
     const getAcc = db.prepare('SELECT id FROM accounts WHERE iban=?');
     const insAcc = db.prepare('INSERT INTO accounts (iban, name) VALUES (?,?)');
@@ -259,7 +259,7 @@ function learn(db, t, categoryId) {
 
 // ids krijgen handmatig een categorie (of null = wissen). Geeft aantal gewijzigde rijen.
 export function setCategory(db, ids, categoryId, { learnFrom = true } = {}) {
-  return tx(db, () => {
+  return withTx(db, () => {
     const get = db.prepare('SELECT * FROM transactions WHERE id=?');
     const up = db.prepare('UPDATE transactions SET category_id=?, cat_source=?, cat_conf=?, cat_reason=?, confirmed=? WHERE id=?');
     let n = 0;
@@ -275,8 +275,21 @@ export function setCategory(db, ids, categoryId, { learnFrom = true } = {}) {
   });
 }
 
+// Zet in één keer handmatige categorieën (bijv. uit een Notion-import) en leer ervan, in de gegeven volgorde
+// (chronologisch: de nieuwste keuze telt het zwaarst). Draait binnen de transactie van de aanroeper.
+export function applyManual(db, pairs, reason = 'Uit Notion') {
+  const get = db.prepare('SELECT * FROM transactions WHERE id=?');
+  const up = db.prepare('UPDATE transactions SET category_id=?, cat_source=?, cat_conf=?, cat_reason=?, confirmed=1 WHERE id=?');
+  let n = 0;
+  for (const p of pairs) {
+    const t = get.get(p.id); if (!t || !p.category_id) continue;
+    up.run(p.category_id, 'manual', 1, reason, p.id); learn(db, t, p.category_id); n++;
+  }
+  return n;
+}
+
 export function confirmSuggestions(db, ids) {
-  return tx(db, () => {
+  return withTx(db, () => {
     const get = db.prepare('SELECT * FROM transactions WHERE id=? AND category_id IS NOT NULL');
     const up = db.prepare("UPDATE transactions SET confirmed=1, cat_source='manual', cat_conf=1, cat_reason='Bevestigd' WHERE id=?");
     let n = 0;
@@ -296,7 +309,7 @@ export function snapshot(db, ids) {
   return { rows, keys: [...keys], memory: [...keys].flatMap(k => mem.all(k)) };
 }
 export function restore(db, snap) {
-  return tx(db, () => {
+  return withTx(db, () => {
     const up = db.prepare('UPDATE transactions SET category_id=?, cat_source=?, cat_conf=?, cat_reason=?, confirmed=? WHERE id=?');
     for (const r of snap.rows) up.run(r.category_id, r.cat_source, r.cat_conf, r.cat_reason, r.confirmed, r.id);
     const del = db.prepare('DELETE FROM memory WHERE key=?'), ins = db.prepare('INSERT INTO memory (key, category_id, n, label) VALUES (?,?,?,?)');

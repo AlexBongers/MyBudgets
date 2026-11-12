@@ -7,6 +7,8 @@ import {
 import { parseRabobankCsv } from './rabobank.js';
 import { detectRecurring } from './recurring.js';
 import { describeRule } from './categorizer.js';
+import { createHash } from 'node:crypto';
+import { loadTables, guessMapping, buildPlan, applyPlan, buildBudgetPlan, applyBudgetPlan } from './notion.js';
 
 const monthRe = /^\d{4}-\d{2}$/;
 const REVIEW = `t.confirmed=0 AND (t.category_id IS NULL OR t.cat_conf < ${AUTO_THRESHOLD - 0.001})`;
@@ -37,6 +39,18 @@ export function createApi(db, ctx = {}) {
     const get = db.prepare('SELECT merchant, counter_iban FROM transactions WHERE id=?'), rows = ids.map(i => get.get(i)).filter(Boolean);
     return recategorize(db, undefined, { merchants: [...new Set(rows.map(r => r.merchant))], ibans: [...new Set(rows.map(r => r.counter_iban))] });
   };
+  // Notion-tabellen cachen we kort (laatste 3 bestanden) zodat het voorbeeld snel blijft bijwerken
+  const notionCache = new Map();
+  function notionTables(b) {
+    if (!b.base64) throw httpErr(400, 'Geen bestand ontvangen');
+    const key = createHash('sha1').update(b.base64).digest('hex');
+    if (!notionCache.has(key)) {
+      let t; try { t = loadTables(Buffer.from(b.base64, 'base64'), b.name || ''); } catch (e) { throw httpErr(400, e.message); }
+      notionCache.set(key, t); if (notionCache.size > 3) notionCache.delete(notionCache.keys().next().value);
+    }
+    return notionCache.get(key);
+  }
+  function pickTable(b) { const t = notionTables(b).find(x => x.name === b.table); if (!t) throw httpErr(400, 'Tabel niet gevonden in het bestand'); return t; }
   const needCat = id => { if (!one('SELECT 1 FROM categories WHERE id=?', id)) throw httpErr(400, 'Onbekende categorie'); };
 
   // Inkomsten/uitgaven per maand voor een reeks maanden in één query (datumbereik gebruikt de index)
@@ -78,6 +92,7 @@ export function createApi(db, ctx = {}) {
     for (const id of ids) {
       const bs = budgets.filter(b => b.c === id); if (!bs.length) continue;
       let k = bs[0].month, bi = 0, cur = 0, total = 0, guardN = 0;
+      const firstTx = one('SELECT MIN(ym) m FROM transactions').m; if (firstTx && k < firstTx) k = firstTx; // budget 'vanaf het begin' telt pas vanaf de eerste transactie
       while (k < m && guardN++ < 120) {
         while (bi < bs.length && bs[bi].month <= k) cur = bs[bi++].amount;
         total += cur - (sp.get(id + '|' + k) ?? 0);
@@ -409,6 +424,24 @@ export function createApi(db, ctx = {}) {
       return { ...r, skipped: r.skipped + parsed.duplicateRows.length, duplicatesInFile: parsed.duplicateRows.length,
         rowsInFile: parsed.rowsInFile, problems: parsed.skippedRows.slice(0, 20), problemCount: parsed.skippedRows.length,
         warnings: parsed.detection.warnings.slice(0, 10), encoding: parsed.detection.encoding, separator: parsed.detection.separator };
+    },
+    // ---- Notion-import: analyseren, voorbeeld (plan) en uitvoeren. Stateless: het bestand gaat elke keer mee (gecachet).
+    'POST /api/notion/analyze': b => {
+      const tables = notionTables(b);
+      return { tables: tables.map(t => { const g = guessMapping(t); return { name: t.name, rows: t.rows.length, headers: t.headers, guess: g, samples: t.rows.slice(0, 6) }; }) };
+    },
+    'POST /api/notion/plan': b => {
+      const t = pickTable(b);
+      if (b.kind === 'budgets') { const p = buildBudgetPlan(db, t, b.config || {}); return { kind: 'budgets', summary: p.summary, errors: p.errors.slice(0, 15), items: p.items.slice(0, 40) }; }
+      try { const p = buildPlan(db, t, b.config || {}); return { kind: 'transactions', summary: p.summary, preview: p.preview, errors: p.errors.slice(0, 15), categoryPlan: p.categoryPlan }; }
+      catch (e) { throw httpErr(400, e.message); }
+    },
+    'POST /api/notion/import': b => {
+      const t = pickTable(b);
+      try {
+        if (b.kind === 'budgets') return { kind: 'budgets', ...applyBudgetPlan(db, buildBudgetPlan(db, t, b.config || {})) };
+        return { kind: 'transactions', ...applyPlan(db, buildPlan(db, t, b.config || {}), { name: b.name || t.name }) };
+      } catch (e) { throw e.status ? e : httpErr(400, e.message); }
     },
     'POST /api/demo': () => {
       if (!ctx.demoCSV) throw httpErr(400, 'Geen voorbeelddata beschikbaar');

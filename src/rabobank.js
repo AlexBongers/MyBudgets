@@ -136,7 +136,7 @@ function decodeCsv(input) {
   }
 }
 
-function detectSeparator(text) {
+export function detectSeparator(text) {
   const first = text.split(/\r?\n/).find(l => l.trim().length > 0) ?? '';
   let best = ',', bestCount = -1;
   for (const s of SEPARATORS) { const n = countOutsideQuotes(first, s); if (n > bestCount) { best = s; bestCount = n; } }
@@ -152,7 +152,7 @@ function countOutsideQuotes(text, sep) {
   return n;
 }
 
-function parseCsvRows(text, sep) {
+export function parseCsvRows(text, sep) {
   const rows = [], warnings = [];
   let row = [], field = '', inQuotes = false, currentLine = 1, rowStartLine = 1;
   const addWarning = w => { const m = `Regel ${currentLine}: ${w}`; if (warnings.length < MAX_WARNINGS && !warnings.includes(m)) warnings.push(m); };
