@@ -10,7 +10,7 @@ Vereist [Node.js](https://nodejs.org) ≥ 22.13 (aanbevolen: LTS).
 ```bash
 npm install
 npm start          # opent de app
-npm test           # parser, categoriseermodule, service (38 tests)
+npm test           # parser, categoriseermodule, corpus, service, server (45 tests)
 npm run dist       # bouwt dist/MyBudgets-*.dmg (Apple Silicon + Intel)
 ```
 
@@ -61,7 +61,7 @@ zodat "ALBERT HEIJN 1234 EINDHOVEN" en "Albert Heijn 5678" dezelfde tegenpartij 
 | **Te beoordelen** | per tegenpartij indelen met toetsenbord (`j`/`k`, `Enter`, `c`, `r`), regel maken, suggesties bevestigen |
 | **Transacties** | zoeken (`/`), filteren (categorie, rekening, soort, datumbereik), bulk indelen, notities, splitsen over categorieën |
 | **Budget** | per maand, gemiddelde van 3 maanden als hulp, overdragen (rollover) per categorie, beschikbaar bedrag |
-| **Vaste lasten** | automatisch herkende abonnementen en terugkerende betalingen |
+| **Vaste lasten** | automatisch herkende abonnementen en terugkerende betalingen (met ✕ weg te zetten) |
 | **Rapporten** | categorie × maand (6/12/24 maanden) met spaarquote |
 | **Categorieën & regels** | categorieën (samenvoegen bij verwijderen), regels met live voorbeeld, regelsuggesties, geheugen |
 | **Overzicht** | drill-down per categorie of tegenpartij (klik op een categorie of tegenpartij) |
@@ -70,6 +70,13 @@ zodat "ALBERT HEIJN 1234 EINDHOVEN" en "Albert Heijn 5678" dezelfde tegenpartij 
 Verder: opdrachtpalet **⌘K**, meerdere rekeningen, donker/licht, native menu, onthoudt scherm, maand en venster.
 
 Sneltoetsen: ⌘O importeren · ⌘K zoeken/navigeren · ⌘1–7 schermen · ⌘[ ⌘] vorige/volgende maand · ⌘Z ongedaan maken · ⇧⌘E exporteren.
+
+## Privacy en beveiliging
+
+- Alle gegevens staan lokaal in één SQLite-bestand; er gaat niets het internet op.
+- De Electron-app praat met de database via IPC (geen open poort), met `contextIsolation`, `sandbox`, een strikte CSP en geblokkeerde navigatie.
+- Herstellen van een back-up valideert het bestand en maakt eerst een veiligheidskopie.
+- De optionele browsermodus (`npm run web`) luistert alleen op `127.0.0.1`, controleert de `Host`-header (DNS-rebinding) en accepteert schrijfacties alleen als `application/json` (CSRF).
 
 ## Prestaties
 

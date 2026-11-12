@@ -18,6 +18,10 @@
 - PDF-export van het huidige scherm (⌘P), thema (systeem/licht/donker).
 - Dagelijkse automatische back-ups (14 bewaard), veilig herstel met validatie en veiligheidskopie.
 
+**Beveiliging en robuustheid**
+- Browsermodus beschermd tegen DNS-rebinding en CSRF; importfouten noemen de gevonden kolommen; foutief herkende vaste lasten zijn weg te zetten.
+- Toegankelijkheid: focusbeheer in dialogen, aria-labels, tooltips op grafieken.
+
 **Intern**
 - Rabobank-parser overgenomen uit `actual-budget-mcp`; ruwe bytes worden doorgegeven voor betrouwbare coderingsdetectie.
 - Prestaties op 60.000 transacties: één transactie indelen 1,5 s → 60 ms, dashboard 320 → 180 ms.
