@@ -15,6 +15,9 @@ import { MERCHANTS } from './merchants.js';
 
 export const AUTO_THRESHOLD = 0.8;
 const normIban = s => String(s || '').replace(/\s+/g, '').toUpperCase();
+// Merknamen die ook gewone woorden of bedrijfsnamen zijn: alleen automatisch bij pin-, iDEAL- of incassobetalingen
+const AMBIGUOUS_BRANDS = new Set(['plus', 'spar', 'coop', 'action', 'deen', 'ns', 'bp', 'simpel']);
+const PIN_LIKE = new Set(['ba', 'bc', 'id', 'ei', 'cc', 'ga']);
 const NO_IBAN_MEMORY = new Set(['id', 'ba', 'bc', 'ga', 'cc']); // iDEAL/pin: IBAN zegt niets over de winkel
 
 export function prepare(tx) {
@@ -129,8 +132,10 @@ export class Categorizer {
     if (!best) return null;
     // Een inkomende betaling bij een uitgavecategorie is meestal een terugbetaling: minder zeker.
     const refund = best.cat.kind === 'expense' && tx.amount > 0;
-    return { category_id: best.cat.id, source: 'builtin', confidence: refund ? Math.min(best.conf, 0.7) : best.conf,
-      reason: refund ? `Mogelijk terugbetaling: "${best.raw}"` : `Bekende tegenpartij: "${best.raw}"` };
+    const notPin = AMBIGUOUS_BRANDS.has(best.raw) && !PIN_LIKE.has(String(tx.code || '').toLowerCase());
+    const conf = refund ? Math.min(best.conf, 0.7) : notPin ? Math.min(best.conf, 0.65) : best.conf;
+    return { category_id: best.cat.id, source: 'builtin', confidence: conf,
+      reason: refund ? `Mogelijk terugbetaling: "${best.raw}"` : notPin ? `Mogelijk "${best.raw}", maar het is geen pin- of iDEAL-betaling` : `Bekende tegenpartij: "${best.raw}"` };
   }
 
   // ---- 5. heuristieken op Rabobank-code
