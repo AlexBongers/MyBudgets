@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session, nativeTheme, screen } from 'electron';
 import { readFileSync, writeFileSync, copyFileSync, existsSync, unlinkSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,9 +24,20 @@ function startDb() {
   api = createApi(db, { demoCSV: demoCSVFrom(join(ROOT, 'samples/rabobank-demo.csv')) });
 }
 
+// Vensterpositie en -grootte onthouden
+const statePath = join(app.getPath('userData'), 'window.json');
+function loadBounds() {
+  try {
+    const b = JSON.parse(readFileSync(statePath, 'utf8'));
+    const visible = screen.getAllDisplays().some(d => b.x >= d.bounds.x - 50 && b.y >= d.bounds.y - 50 && b.x < d.bounds.x + d.bounds.width - 100 && b.y < d.bounds.y + d.bounds.height - 100);
+    return visible ? b : { width: b.width, height: b.height };
+  } catch { return {}; }
+}
+function saveBounds() { try { if (win && !win.isMinimized() && !win.isFullScreen()) writeFileSync(statePath, JSON.stringify(win.getBounds())); } catch { /* niet kritiek */ } }
+
 function createWindow() {
   win = new BrowserWindow({
-    width: 1320, height: 860, minWidth: 1000, minHeight: 640, show: false,
+    width: 1320, height: 860, ...loadBounds(), minWidth: 1000, minHeight: 640, show: false,
     title: 'MyBudgets',
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 18, y: 18 },
@@ -35,6 +46,7 @@ function createWindow() {
     webPreferences: { preload: join(ROOT, 'electron/preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false },
   });
   win.once('ready-to-show', () => win.show());
+  win.on('close', saveBounds);
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', e => e.preventDefault());
   win.webContents.on('did-finish-load', () => { while (pendingFiles.length) send({ action: 'import-files', files: [readCSV(pendingFiles.shift())] }); });
@@ -72,6 +84,7 @@ ipcMain.handle('db:restore', async () => {
   for (const ext of ['-wal', '-shm']) if (existsSync(dbPath + ext)) unlinkSync(dbPath + ext);
   app.relaunch(); app.exit(0); return true;
 });
+ipcMain.handle('theme:set', (_e, t) => { nativeTheme.themeSource = ['light', 'dark'].includes(t) ? t : 'system'; return true; });
 ipcMain.handle('shell:reveal', () => { shell.showItemInFolder(dbPath); return true; });
 
 function buildMenu() {

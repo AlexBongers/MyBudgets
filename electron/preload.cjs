@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('native', {
   backup: () => ipcRenderer.invoke('db:backup'),
   restore: () => ipcRenderer.invoke('db:restore'),
   reveal: () => ipcRenderer.invoke('shell:reveal'),
+  setTheme: t => ipcRenderer.invoke('theme:set', t),
   onMenu: cb => ipcRenderer.on('menu', (_e, m) => cb(m)),
 });

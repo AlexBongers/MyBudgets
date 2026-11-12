@@ -8,7 +8,7 @@ const TITLES = Object.fromEntries([...TABS, ['import', 'Importeren'], ['settings
 const NOMONTH = ['categories', 'import', 'settings', 'recurring', 'review'];
 
 function updateNav() {
-  $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" data-tab="${k}">${icon(k)}<span>${l}</span>${k === 'review' && S.review ? `<span class="badge">${S.review}</span>` : ''}</button>`).join('')
+  $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" ${S.tab === k ? 'aria-current="page"' : ''} data-tab="${k}">${icon(k)}<span>${l}</span>${k === 'review' && S.review ? `<span class="badge">${S.review}</span>` : ''}</button>`).join('')
     + `<div class="nav-sep"></div>` + [['import', 'Importeren'], ['settings', 'Instellingen']].map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" data-tab="${k}">${icon(k)}<span>${l}</span></button>`).join('');
   const bal = S.accounts.filter(a => a.balance != null).reduce((a, b) => a + b.balance, 0);
   $('#sidefoot').innerHTML = S.accounts.some(a => a.balance != null) ? `Totaalsaldo<b>${eur(bal)}</b>` : '<span class="faint">Lokaal &amp; privé</span>';
@@ -26,7 +26,9 @@ async function refreshMeta() {
 async function go(tab) {
   clearKeyHandler();
   if (tab === 'detail' && S.tab !== 'detail') S.backTab = S.tab;
-  S.tab = tab; document.title = 'MyBudgets';
+  S.tab = tab;
+  if (tab !== 'detail') pref.set('tab', tab);
+  if (S.month) { pref.set('month', S.month); $('#monthlabel').textContent = monthName(S.month); } document.title = 'MyBudgets';
   $('#title').textContent = TITLES[tab];
   $('#monthpick').style.display = NOMONTH.includes(tab) ? 'none' : '';
   updateNav();
@@ -82,4 +84,11 @@ window.addEventListener('drop', guard(async e => {
   importFiles(await Promise.all(files.map(async f => ({ name: f.name, base64: await readFileBase64(f) }))));
 }));
 
-guard(async () => { await refreshMeta(); await go('dashboard'); })();
+guard(async () => {
+  applyTheme(pref.get('theme'));
+  await refreshMeta();
+  const savedMonth = pref.get('month'), savedTab = pref.get('tab');
+  if (savedMonth && /^\d{4}-\d{2}$/.test(savedMonth)) S.month = savedMonth;
+  const valid = TABS.some(t => t[0] === savedTab) || savedTab === 'settings';
+  await go(S.hasData && valid ? savedTab : 'dashboard');
+})();

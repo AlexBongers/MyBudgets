@@ -15,6 +15,12 @@ const shiftMonth = (m, n) => { const [y, mo] = m.split('-').map(Number); return 
 const debounce = (fn, ms = 250) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const pct = (a, b) => (b ? Math.round(a / b * 100) : 0);
 
+// Kleine, veilige opslag voor voorkeuren (kan falen in privé-modus)
+const pref = { get(k) { try { return localStorage.getItem('mb.' + k); } catch { return null; } }, set(k, v) { try { localStorage.setItem('mb.' + k, v); } catch { /* geen opslag beschikbaar */ } } };
+function applyTheme(t) {
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  if (window.native && window.native.setTheme) window.native.setTheme(t === 'light' || t === 'dark' ? t : 'system');
+}
 const S = { tab: 'dashboard', month: null, cats: [], months: [], accounts: [], review: 0, txFilter: {}, hasData: false };
 const catById = id => S.cats.find(c => c.id === id);
 
@@ -63,7 +69,7 @@ function catSelect(value, { none = '— geen —', cls = 'cat-input', attrs = ''
 function modal(html, { wide } = {}) {
   const root = $('#modal-root');
   const el = document.createElement('div'); el.className = 'overlay';
-  el.innerHTML = `<div class="modal" ${wide ? 'style="width:min(760px,94vw)"' : ''} role="dialog">${html}</div>`;
+  el.innerHTML = `<div class="modal" ${wide ? 'style="width:min(760px,94vw)"' : ''} role="dialog" aria-modal="true">${html}</div>`;
   const close = () => { el.remove(); document.removeEventListener('keydown', onKey); };
   const onKey = e => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);

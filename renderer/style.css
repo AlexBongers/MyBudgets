@@ -4,11 +4,16 @@
   --good:#248a3d;--bad:#d70015;--warn:#c93400;--good-bg:rgba(52,199,89,.15);--bad-bg:rgba(255,59,48,.12);--warn-bg:rgba(255,159,10,.16);
   --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 14px rgba(0,0,0,.04);--radius:12px;color-scheme:light
 }
-@media (prefers-color-scheme:dark){:root{
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
   --bg:#1c1c1e;--card:#2a2a2d;--side:#242426;--text:#f5f5f7;--muted:#a1a1a6;--faint:#6e6e73;
   --line:rgba(255,255,255,.1);--hover:rgba(255,255,255,.06);--accent:#0a84ff;--accent-soft:rgba(10,132,255,.2);
   --good:#32d74b;--bad:#ff6961;--warn:#ffb340;--good-bg:rgba(50,215,75,.16);--bad-bg:rgba(255,69,58,.18);--warn-bg:rgba(255,159,10,.18);
   --shadow:0 1px 2px rgba(0,0,0,.3);color-scheme:dark}}
+:root[data-theme=dark]{
+  --bg:#1c1c1e;--card:#2a2a2d;--side:#242426;--text:#f5f5f7;--muted:#a1a1a6;--faint:#6e6e73;
+  --line:rgba(255,255,255,.1);--hover:rgba(255,255,255,.06);--accent:#0a84ff;--accent-soft:rgba(10,132,255,.2);
+  --good:#32d74b;--bad:#ff6961;--warn:#ffb340;--good-bg:rgba(50,215,75,.16);--bad-bg:rgba(255,69,58,.18);--warn-bg:rgba(255,159,10,.18);
+  --shadow:0 1px 2px rgba(0,0,0,.3);color-scheme:dark}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{font:13.5px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased;overflow:hidden}
@@ -140,3 +145,9 @@ svg text{fill:var(--muted);font-size:11px;font-family:inherit}
 .cat-input{width:200px;max-width:100%}
 kbd{background:var(--hover);border-radius:4px;padding:0 5px;font:inherit;font-size:11px}
 hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+/* toegankelijkheid en beweging */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
+.page{animation:rise .22s ease-out}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
