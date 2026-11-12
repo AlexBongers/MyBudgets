@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session, nativeTheme, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, shell, session, nativeTheme, screen, safeStorage } from 'electron';
 import { readFileSync, writeFileSync, copyFileSync, existsSync, unlinkSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { join, basename } from 'node:path';
@@ -124,6 +124,16 @@ ipcMain.handle('export:pdf', async (_e, name) => {
   if (r.canceled || !r.filePath) return false;
   const pdf = await win.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { marginType: 'default' } });
   writeFileSync(r.filePath, pdf); return true;
+});
+// Notion-token: versleuteld met de macOS-Sleutelhanger (safeStorage), nooit leesbaar op schijf
+const tokenFile = () => join(app.getPath('userData'), 'notion-token.bin');
+ipcMain.handle('secret:get', () => { try { return existsSync(tokenFile()) && safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(readFileSync(tokenFile())) : ''; } catch { return ''; } });
+ipcMain.handle('secret:set', (_e, v) => {
+  try {
+    if (!v) { if (existsSync(tokenFile())) unlinkSync(tokenFile()); return true; }
+    if (!safeStorage.isEncryptionAvailable()) return false;
+    writeFileSync(tokenFile(), safeStorage.encryptString(String(v))); return true;
+  } catch { return false; }
 });
 ipcMain.handle('theme:set', (_e, t) => { nativeTheme.themeSource = ['light', 'dark'].includes(t) ? t : 'system'; return true; });
 ipcMain.handle('shell:reveal', () => { shell.showItemInFolder(dbPath); return true; });

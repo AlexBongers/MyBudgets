@@ -203,7 +203,7 @@ export function guessMapping(table) {
   }
   return {
     kind, fields: f, budget: { amount: budget, month }, sign: 'auto', dateOrder: detectDateOrder(f.date ? stats[idx(f.date)].vals : []),
-    decimal: detectDecimalSep(f.amount ? stats[idx(f.amount)].vals : (f.amountOut ? [...stats[idx(f.amountOut)].vals, ...stats[idx(f.amountIn)].vals] : [])),
+    decimal: table.fromApi ? '.' : detectDecimalSep(f.amount ? stats[idx(f.amount)].vals : (f.amountOut ? [...stats[idx(f.amountOut)].vals, ...stats[idx(f.amountIn)].vals] : [])),
     columns: table.headers.map((h, i) => ({ name: h, date: +stats[i].date.toFixed(2), num: +stats[i].num.toFixed(2), unique: stats[i].unique })),
   };
 }

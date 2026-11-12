@@ -10,7 +10,7 @@ Vereist [Node.js](https://nodejs.org) ≥ 22.13 (aanbevolen: LTS).
 ```bash
 npm install
 npm start          # opent de app
-npm test           # parser, categoriseermodule, corpus, service, server (58 tests)
+npm test           # parser, categoriseermodule, corpus, service, server (63 tests)
 npm run e2e        # doorloopt de echte app (17 controles, tijdelijke database)
 npm run dist       # bouwt dist/MyBudgets-*.dmg (Apple Silicon + Intel)
 ```
@@ -37,6 +37,10 @@ NL- en EN-datums (“12 november 2026”, “November 12, 2026 → …”), bedr
 Je ziet altijd eerst een **voorbeeld** en kunt kolommen, tekens, datum- en decimaalnotatie en de **categorie-koppeling** aanpassen. Er wordt pas geschreven na “Importeren”.
 Staan dezelfde transacties al in MyBudgets (bijv. uit je Rabobank-import; zelfde bedrag, datum ±3 dagen), dan worden ze **verrijkt** met de Notion-categorie in plaats van dubbel te worden,
 en leert de app van elke indeling. Opnieuw importeren voegt niets dubbel toe; elke import is terug te draaien. Een voorbeeldexport staat in `samples/notion-demo.zip`.
+
+**Rechtstreeks via de Notion-API** (zonder export): maak een integratie op notion.so/my-integrations, deel je database(s) ermee (⋯ → Connections), plak het token in de wizard en kies je databases
+(`src/notion-api.js`; dezelfde REST-API als `notion-sdk-js`, zonder dependency). Ondersteund: paginering, rate-limit-retry, alle eigenschapstypen (titel, getal, datum, select, status, formule, rollup, relatie → paginatitel…).
+Het token kan versleuteld in de macOS-Sleutelhanger worden onthouden (`safeStorage`).
 
 ### Parser
 

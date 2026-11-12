@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('native', {
   reveal: () => ipcRenderer.invoke('shell:reveal'),
   setTheme: t => ipcRenderer.invoke('theme:set', t),
   backups: { list: () => ipcRenderer.invoke('backups:list'), restore: n => ipcRenderer.invoke('backups:restore', n), reveal: () => ipcRenderer.invoke('backups:reveal') },
+  secret: { get: () => ipcRenderer.invoke('secret:get'), set: v => ipcRenderer.invoke('secret:set', v) },
   exportPDF: name => ipcRenderer.invoke('export:pdf', name),
   onMenu: cb => ipcRenderer.on('menu', (_e, m) => cb(m)),
 });

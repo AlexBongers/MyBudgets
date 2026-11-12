@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.3.0
+- Notion rechtstreeks via de API (token, databases kiezen), met paginering, rate-limit-retry en alle eigenschapstypen; token versleuteld te onthouden.
+
 ## 2.2.0
 - **Notion-importer**: ZIP/CSV-export lezen, automatische kolom- en formaatherkenning (NL/EN), voorbeeld vooraf, categorie-koppeling, budgetten, verrijken van bestaande transacties, herhaald importeren zonder dubbelen.
 

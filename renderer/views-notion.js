@@ -6,8 +6,9 @@ const FIELD_LABELS = [
   ['category', 'Categorie'], ['account', 'Rekening'], ['type', 'Type (uitgave/inkomst)'],
 ];
 
+const srcBody = f => (f.apiToken ? { apiToken: f.apiToken, databaseIds: f.databaseIds, name: f.name } : { base64: f.base64, name: f.name });
 async function loadNotionFile(file) {
-  const r = await POST('/notion/analyze', { base64: file.base64, name: file.name });
+  const r = await POST('/notion/analyze', srcBody(file));
   Object.assign(NOTION, { file, tables: r.tables, t: 0, cfg: {}, kind: {}, catMap: {}, done: {}, plan: null });
   r.tables.forEach(t => { NOTION.kind[t.name] = t.guess.kind === 'unknown' ? 'skip' : t.guess.kind; NOTION.cfg[t.name] = { fields: { ...t.guess.fields }, budget: { ...t.guess.budget }, sign: 'auto', dateOrder: t.guess.dateOrder, decimal: t.guess.decimal, enrich: true, defaultAccount: '' }; });
   const first = r.tables.findIndex(t => NOTION.kind[t.name] === 'transactions'); NOTION.t = first >= 0 ? first : 0;
@@ -28,7 +29,12 @@ V.notion = async () => {
 function notionStart() {
   const m = render(`<div class="grid g21"><div class="stack">
       <div class="dz" id="ndz"><div style="font-size:34px">🗂️</div><b style="color:var(--text)">Sleep je Notion-export hierheen</b><br>ZIP (“Markdown &amp; CSV”) of een losse CSV van je database</div>
-      <p class="muted small" style="margin:0">Je bestand wordt alleen lokaal gelezen. Je ziet eerst een voorbeeld; er wordt niets opgeslagen voordat je op “Importeren” klikt.</p></div>
+      <p class="muted small" style="margin:0">Je bestand wordt alleen lokaal gelezen. Je ziet eerst een voorbeeld; er wordt niets opgeslagen voordat je op “Importeren” klikt.</p>
+      <div class="card"><h2>Of: rechtstreeks verbinden met Notion</h2>
+        <ol class="steps small"><li>Maak op <b>notion.so/my-integrations</b> een integratie en kopieer het geheime token.</li><li>Open je database in Notion → <b>⋯ → Connections</b> → voeg je integratie toe.</li><li>Plak het token hieronder.</li></ol>
+        <div class="row" style="flex-wrap:nowrap"><input type="password" id="ntoken" placeholder="secret_… of ntn_…" autocomplete="off" spellcheck="false" style="flex:1"><button class="btn" id="nconnect">Verbinden</button></div>
+        ${window.native?.secret ? '<label class="row small muted" style="margin-top:8px"><input type="checkbox" id="nremember" checked> Token versleuteld onthouden (Sleutelhanger)</label>' : ''}
+        <div id="ndbs" style="margin-top:12px"></div></div></div>
     <div class="card"><h2>Exporteren uit Notion</h2><ol class="steps">
       <li>Open je budget-database (of de hele pagina met alle databases).</li>
       <li>Klik op <b>⋯</b> → <b>Export</b>.</li>
@@ -36,6 +42,23 @@ function notionStart() {
       <li>Download de ZIP en sleep hem hier in.</li></ol>
       <hr><p class="muted small" style="margin:0"><b>Slim:</b> importeer eerst je Rabobank-CSV’s. Dan worden je Notion-categorieën aan de echte bankboekingen gehangen in plaats van dubbel te worden, en leert MyBudgets ervan.</p></div></div>`);
   $('#ndz', m).addEventListener('click', guard(pickNotionFile));
+  const connect = guard(async token => {
+    const box = $('#ndbs'); box.innerHTML = '<span class="muted small">Verbinden…</span>';
+    let r; try { r = await POST('/notion/api/databases', { token }); } catch (e) { box.innerHTML = `<div class="neg small">⚠ ${esc(e.message)}</div>`; return; }
+    if (window.native?.secret && $('#nremember')?.checked) window.native.secret.set(token);
+    if (!r.databases.length) { box.innerHTML = '<div class="small neg">Verbonden, maar er is geen database met je integratie gedeeld. Open je database → ⋯ → Connections → voeg de integratie toe.</div>'; return; }
+    box.innerHTML = `<div class="small muted" style="margin-bottom:6px">${r.databases.length} database${r.databases.length === 1 ? '' : 's'} gevonden. Kies wat je wilt importeren:</div><div class="stack" style="max-height:220px;overflow:auto;gap:6px">${r.databases.map(d => `<label class="row" style="flex-wrap:nowrap"><input type="checkbox" value="${esc(d.id)}" data-t="${esc(d.title)}"> <span>${esc(d.title)}</span> <span class="faint small">${d.properties} kolommen</span></label>`).join('')}</div>
+      <button class="btn primary" id="nload" style="margin-top:10px" disabled>Laden…</button>`;
+    const upd = () => { const n = $$('#ndbs input[type=checkbox]:checked').length; $('#nload').disabled = !n; $('#nload').textContent = n ? `${n} database${n === 1 ? '' : 's'} laden` : 'Laden…'; };
+    box.addEventListener('change', upd);
+    $('#nload').onclick = guard(async () => {
+      const picked = $$('#ndbs input:checked'); $('#nload').textContent = 'Ophalen uit Notion…'; $('#nload').disabled = true;
+      await loadNotionFile({ name: 'Notion (' + picked.map(i => i.dataset.t).join(', ').slice(0, 60) + ')', apiToken: token, databaseIds: picked.map(i => i.value) });
+    });
+  });
+  $('#nconnect', m).onclick = () => { const t = $('#ntoken').value.trim(); if (t) connect(t); else toast('Plak eerst je Notion-token'); };
+  $('#ntoken', m).addEventListener('keydown', e => { if (e.key === 'Enter') $('#nconnect').click(); });
+  if (window.native?.secret) window.native.secret.get().then(t => { if (t && $('#ntoken')) { $('#ntoken').value = t; connect(t); } });
 }
 
 const tableOf = () => NOTION.tables[NOTION.t];
@@ -46,8 +69,8 @@ function notionWizard() {
   const colSel = (field, v) => `<select data-f="${field}"><option value="">— niet gebruiken —</option>${headers.map(h => `<option ${h === v ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select>`;
   const hasSplit = !!(cfg.fields.amountIn || cfg.fields.amountOut) && !cfg.fields.amount;
   const m = render(`
-    <div class="row between" style="margin-bottom:12px"><div class="row"><span class="chip" style="--c:#6b7280">🗂️ ${esc(NOTION.file.name)}</span><span class="muted small">${NOTION.tables.length} tabel${NOTION.tables.length === 1 ? '' : 'len'} gevonden</span></div>
-      <button class="btn sm" id="nother">Ander bestand…</button></div>
+    <div class="row between" style="margin-bottom:12px"><div class="row"><span class="chip" style="--c:#6b7280">${NOTION.file.apiToken ? '🔌' : '🗂️'} ${esc(NOTION.file.name)}</span><span class="muted small">${NOTION.tables.length} tabel${NOTION.tables.length === 1 ? '' : 'len'} gevonden</span></div>
+      <button class="btn sm" id="nother">Andere bron…</button></div>
     ${NOTION.tables.length > 1 ? `<div class="seg" id="ntabs" style="margin-bottom:14px;flex-wrap:wrap">${NOTION.tables.map((t, i) => `<button data-i="${i}" class="${i === NOTION.t ? 'on' : ''}">${esc(t.name)} <span class="faint">· ${t.rows}${NOTION.done[t.name] ? ' ✓' : ''}</span></button>`).join('')}</div>` : ''}
     <div class="card" style="margin-bottom:16px"><div class="row between"><h2 style="margin:0">${esc(tb.name)} <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">· ${tb.rows} rijen</span></h2>
       <div class="seg" id="nkind">${[['transactions', 'Transacties'], ['budgets', 'Budgetten'], ['skip', 'Overslaan']].map(([v, l]) => `<button data-v="${v}" class="${kind === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
@@ -86,7 +109,7 @@ function notionWizard() {
 }
 
 const notionBody = () => { const tb = tableOf(), kind = NOTION.kind[tb.name], cfg = cfgOf();
-  return { base64: NOTION.file.base64, name: NOTION.file.name, table: tb.name, kind, config: { ...cfg, defaultAccount: cfg.defaultAccount || null, categoryMap: NOTION.catMap[tb.name] || {} } }; };
+  return { ...srcBody(NOTION.file), table: tb.name, kind, config: { ...cfg, defaultAccount: cfg.defaultAccount || null, categoryMap: NOTION.catMap[tb.name] || {} } }; };
 
 async function refreshNotionPlan() {
   const seq = ++NOTION.seq, box = $('#nplan'); if (!box) return;

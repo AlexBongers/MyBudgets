@@ -10,8 +10,8 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PUB = join(ROOT, 'renderer');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
-export function createServer(db) {
-  const api = createApi(db, { demoCSV: demoCSVFrom(join(ROOT, 'samples/rabobank-demo.csv')) });
+export function createServer(db, extraCtx = {}) {
+  const api = createApi(db, { demoCSV: demoCSVFrom(join(ROOT, "samples/rabobank-demo.csv")), ...extraCtx });
   return http.createServer(async (req, res) => {
     const send = (code, body, type = 'application/json') => { res.writeHead(code, { 'Content-Type': type }); res.end(Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body)); };
     try {
