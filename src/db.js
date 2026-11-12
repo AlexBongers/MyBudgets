@@ -16,7 +16,7 @@ export function openDb(path = 'data/budget.db') {
   return db;
 }
 
-const cols = (db, t) => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
+const cols = (db, t) => db.prepare(`PRAGMA table_xinfo(${t})`).all().map(c => c.name);
 
 function migrate(db) {
   const v = db.prepare('PRAGMA user_version').get().user_version;
