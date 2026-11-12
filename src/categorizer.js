@@ -35,11 +35,18 @@ export class Categorizer {
       this.memory.get(m.key).push({ category_id: m.category_id, n: m.n });
     }
     this.own = new Set(ownIbans.map(normIban).filter(Boolean));
-    this.builtin = [];
+    this.builtin = []; this.bIndex = new Map(); this.bMaxN = 1;
     for (const [key, conf, pats] of MERCHANTS) {
       const cat = this.byKey.get(key);
       if (!cat) continue; // categorie verwijderd door gebruiker
-      for (const p of pats) { const cp = clean(p); if (cp) this.builtin.push({ p: ' ' + cp + ' ', len: cp.length, cat, conf, raw: cp }); }
+      for (const p of pats) {
+        const cp = clean(p); if (!cp) continue;
+        const e = { len: cp.length, cat, conf, raw: cp, ord: this.builtin.length };
+        this.builtin.push(e);
+        if (!this.bIndex.has(cp)) this.bIndex.set(cp, []);
+        this.bIndex.get(cp).push(e);
+        this.bMaxN = Math.max(this.bMaxN, cp.split(' ').length);
+      }
     }
     this.nb = trainNB(training.filter(t => this.byId.has(t.category_id)));
   }
@@ -105,12 +112,18 @@ export class Categorizer {
 
   // ---- 4. woordenboek
   byBuiltin(tx) {
-    const hay = ' ' + clean(`${tx.payee} ${tx.description}`) + ' ';
+    // n-gram-index: elke aaneengesloten woordreeks van de tekst opzoeken (zelfde semantiek als matchen op woordgrenzen)
+    const w = clean(`${tx.payee} ${tx.description}`).split(' ').filter(Boolean);
     let best = null;
-    for (const b of this.builtin) {
-      if (!hay.includes(b.p)) continue;
-      if (b.cat.kind === 'income' && !(tx.amount > 0)) continue;       // inkomen kan geen uitgave zijn
-      if (!best || b.len > best.len || (b.len === best.len && b.conf > best.conf)) best = b;
+    for (let n = 1; n <= Math.min(this.bMaxN, w.length); n++) {
+      for (let i = 0; i + n <= w.length; i++) {
+        const hits = this.bIndex.get(n === 1 ? w[i] : w.slice(i, i + n).join(' '));
+        if (!hits) continue;
+        for (const b of hits) {
+          if (b.cat.kind === 'income' && !(tx.amount > 0)) continue;       // inkomen kan geen uitgave zijn
+          if (!best || b.len > best.len || (b.len === best.len && (b.conf > best.conf || (b.conf === best.conf && b.ord < best.ord)))) best = b;
+        }
+      }
     }
     if (!best) return null;
     // Een inkomende betaling bij een uitgavecategorie is meestal een terugbetaling: minder zeker.

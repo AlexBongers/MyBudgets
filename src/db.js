@@ -59,6 +59,8 @@ function migrate(db) {
   addCol('transactions', 'cat_reason', "TEXT NOT NULL DEFAULT ''");
   addCol('transactions', 'confirmed', 'INTEGER NOT NULL DEFAULT 0');
   addCol('transactions', 'notes', "TEXT NOT NULL DEFAULT ''");
+  // jaar-maand als afgeleide, geïndexeerde kolom: maandfilters gebruiken zo de index i.p.v. een volledige scan
+  addCol('transactions', 'ym', 'TEXT GENERATED ALWAYS AS (substr(date, 1, 7)) VIRTUAL');
   // v1-regels (alleen patroon) -> nieuw regelformaat
   if (!cols(db, 'rules').length || !cols(db, 'rules').includes('field')) {
     const old = cols(db, 'rules').length ? db.prepare('SELECT pattern, category_id FROM rules').all() : [];
@@ -84,14 +86,16 @@ function migrate(db) {
   DROP VIEW IF EXISTS tl;
   -- 'tl' = transactieregels: gesplitste transacties zijn vervangen door hun delen (voor budget en rapporten)
   CREATE VIEW tl AS
-    SELECT t.id, t.date, t.amount, t.payee, t.description, t.account_id, t.merchant, t.category_id FROM transactions t
+    SELECT t.id, t.date, t.ym, t.amount, t.payee, t.description, t.account_id, t.merchant, t.category_id FROM transactions t
       WHERE NOT EXISTS (SELECT 1 FROM splits s WHERE s.tx_id = t.id)
     UNION ALL
-    SELECT t.id, t.date, s.amount, t.payee, t.description, t.account_id, t.merchant, s.category_id FROM splits s JOIN transactions t ON t.id = s.tx_id;`);
+    SELECT t.id, t.date, t.ym, s.amount, t.payee, t.description, t.account_id, t.merchant, s.category_id FROM splits s JOIN transactions t ON t.id = s.tx_id;`);
   db.exec(`CREATE INDEX IF NOT EXISTS tx_date ON transactions(date);
            CREATE INDEX IF NOT EXISTS tx_merchant ON transactions(merchant);
            CREATE INDEX IF NOT EXISTS tx_cat ON transactions(category_id);
-           CREATE INDEX IF NOT EXISTS tx_amount ON transactions(amount);`);
+           CREATE INDEX IF NOT EXISTS tx_amount ON transactions(amount);
+           CREATE INDEX IF NOT EXISTS tx_ym ON transactions(ym);
+           CREATE INDEX IF NOT EXISTS tx_acc_date ON transactions(account_id, date, seq);`);
   if (v < SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -178,8 +182,17 @@ export function importTransactions(db, parsed) {
 }
 
 // Herclassificeer alle nog niet bevestigde transacties (bevestigde blijven onaangetast).
-export function recategorize(db, cz = loadCategorizer(db)) {
-  const rows = db.prepare('SELECT id, payee, description, amount, counter_iban, code, merchant, category_id, cat_source, cat_conf FROM transactions WHERE confirmed=0').all();
+// scope (optioneel): { merchants, ibans } beperkt het werk tot transacties van die tegenpartijen (bijv. na een handmatige keuze).
+export function recategorize(db, cz = loadCategorizer(db), scope = null) {
+  let where = 'confirmed=0', args = [];
+  if (scope) {
+    const m = scope.merchants?.filter(Boolean) || [], i = scope.ibans?.filter(Boolean) || [];
+    if (!m.length && !i.length) return 0;
+    const ph = a => a.map(() => '?').join(',');
+    where += ' AND (' + [m.length ? `merchant IN (${ph(m)})` : '', i.length ? `counter_iban IN (${ph(i)})` : ''].filter(Boolean).join(' OR ') + ')';
+    args = [...m, ...i];
+  }
+  const rows = db.prepare(`SELECT id, payee, description, amount, counter_iban, code, merchant, category_id, cat_source, cat_conf FROM transactions WHERE ${where}`).all(...args);
   const up = db.prepare('UPDATE transactions SET category_id=?, cat_source=?, cat_conf=?, cat_reason=? WHERE id=?');
   let changed = 0;
   for (const r of rows) {
@@ -190,7 +203,7 @@ export function recategorize(db, cz = loadCategorizer(db)) {
       if (cat !== r.category_id) changed++;
     }
   }
-  return changed + linkTransfers(db);
+  return scope ? changed : changed + linkTransfers(db);
 }
 
 // Tegengestelde bedragen op twee eigen rekeningen (binnen 3 dagen) zijn samen een overboeking,

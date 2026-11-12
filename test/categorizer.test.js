@@ -230,3 +230,17 @@ test('saldo-verloop sluit aan op het laatste saldo; doelen CRUD; verwachte vaste
   await assert.rejects(() => api('POST', '/api/goals', { name: '', target: 0 }), /verplicht/);
   await api('DELETE', '/api/goals/' + g.id); assert.equal((await api('GET', '/api/goals')).length, 0);
 });
+
+test('database op schijf: heropenen en migratie zijn idempotent, gegevens blijven', async () => {
+  const { mkdtempSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+  const { createApi } = await import('../src/service.js');
+  const file = join(mkdtempSync(join(tmpdir(), 'mybudgets-')), 'budget.db');
+  const db1 = openDb(file);
+  importTransactions(db1, parseRabobank(readFileSync(new URL('../samples/rabobank-demo.csv', import.meta.url), 'utf8')));
+  const n = db1.prepare('SELECT COUNT(*) c FROM transactions').get().c; db1.close();
+  const db2 = openDb(file); const api = createApi(db2);
+  assert.equal(db2.prepare('SELECT COUNT(*) c FROM transactions').get().c, n);
+  assert.equal((await api('GET', '/api/dashboard?month=2026-10')).totals.income, 315000);
+  assert.equal(db2.prepare("SELECT ym FROM transactions WHERE date='2026-10-25' LIMIT 1").get().ym, '2026-10');
+  db2.close();
+});

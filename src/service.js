@@ -19,10 +19,12 @@ const daysIn = m => { const [y, mo] = m.split('-').map(Number); return new Date(
 const eur = c => (c / 100).toLocaleString('nl-NL', { style: 'currency', currency: 'EUR', maximumFractionDigits: Math.abs(c) >= 10000 ? 0 : 2 });
 
 export function createApi(db, ctx = {}) {
-  const q = (sql, ...p) => db.prepare(sql).all(...p);
-  const one = (sql, ...p) => db.prepare(sql).get(...p);
+  // MYB_PROFILE=1 toont trage queries (>5 ms) in de console
+  const timed = (fn) => process.env.MYB_PROFILE ? (sql, ...p) => { const t = performance.now(); const r = fn(sql, ...p); const ms = performance.now() - t; if (ms > 5) console.log(`  [${ms.toFixed(0)} ms] ${sql.replace(/\s+/g, ' ').slice(0, 110)}`); return r; } : fn;
+  const q = timed((sql, ...p) => db.prepare(sql).all(...p));
+  const one = timed((sql, ...p) => db.prepare(sql).get(...p));
   const run = (sql, ...p) => db.prepare(sql).run(...p);
-  const latestMonth = () => one('SELECT MAX(substr(date,1,7)) m FROM transactions').m || new Date().toISOString().slice(0, 7);
+  const latestMonth = () => one('SELECT MAX(ym) m FROM transactions').m || new Date().toISOString().slice(0, 7);
   // Laatste 30 wijzigingen kunnen ongedaan worden gemaakt (in het geheugen, per sessie)
   const undoStack = new Map(); let undoSeq = 0;
   const withUndo = (ids, fn) => {
@@ -30,20 +32,29 @@ export function createApi(db, ctx = {}) {
     const id = ++undoSeq; undoStack.set(id, snap); if (undoStack.size > 30) undoStack.delete(undoStack.keys().next().value);
     return { ...res, undo: id };
   };
+  // Na een handmatige keuze hoeven alleen transacties van dezelfde tegenpartij/IBAN opnieuw te worden bekeken.
+  const reclassFor = ids => {
+    const get = db.prepare('SELECT merchant, counter_iban FROM transactions WHERE id=?'), rows = ids.map(i => get.get(i)).filter(Boolean);
+    return recategorize(db, undefined, { merchants: [...new Set(rows.map(r => r.merchant))], ibans: [...new Set(rows.map(r => r.counter_iban))] });
+  };
   const needCat = id => { if (!one('SELECT 1 FROM categories WHERE id=?', id)) throw httpErr(400, 'Onbekende categorie'); };
 
-  function monthTotals(m) {
-    return one(`SELECT
+  // Inkomsten/uitgaven per maand voor een reeks maanden in één query (datumbereik gebruikt de index)
+  function totalsByMonth(list) {
+    const rows = q(`SELECT t.ym mo,
       COALESCE(SUM(CASE WHEN ${INCOME} THEN t.amount END),0) AS income,
       COALESCE(-SUM(CASE WHEN ${EXPENSE} THEN t.amount END),0) AS expenses
-      FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=?`, m);
+      FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE t.date >= ? AND t.date <= ? GROUP BY mo`, list[0] + '-01', list[list.length - 1] + '-31');
+    const by = Object.fromEntries(rows.map(r => [r.mo, r]));
+    return list.map(mo => ({ month: mo, income: by[mo]?.income ?? 0, expenses: by[mo]?.expenses ?? 0 }));
   }
+  const monthTotals = m => { const { income, expenses } = totalsByMonth([m])[0]; return { income, expenses }; };
   function spentByCat(m) {
-    return Object.fromEntries(q(`SELECT category_id c, -SUM(amount) s FROM tl WHERE substr(date,1,7)=? AND category_id IS NOT NULL GROUP BY category_id`, m).map(r => [r.c, r.s]));
+    return Object.fromEntries(q(`SELECT category_id c, -SUM(amount) s FROM tl WHERE ym=? AND category_id IS NOT NULL GROUP BY category_id`, m).map(r => [r.c, r.s]));
   }
   function budgetRows(m) {
     const spent = spentByCat(m);
-    const avg = Object.fromEntries(q(`SELECT category_id c, -SUM(amount)/3.0 a FROM tl WHERE substr(date,1,7) IN (?,?,?) AND category_id IS NOT NULL GROUP BY category_id`,
+    const avg = Object.fromEntries(q(`SELECT category_id c, -SUM(amount)/3.0 a FROM tl WHERE ym IN (?,?,?) AND category_id IS NOT NULL GROUP BY category_id`,
       addMonths(m, -1), addMonths(m, -2), addMonths(m, -3)).map(r => [r.c, Math.round(r.a)]));
     return q(`SELECT c.id, c.name, c.color, c.icon, c.grp,
         (SELECT amount FROM budgets b WHERE b.category_id=c.id AND b.month<=? ORDER BY month DESC LIMIT 1) AS budget,
@@ -80,7 +91,14 @@ export function createApi(db, ctx = {}) {
     }
     return pts;
   }
+  // Cache: het resultaat verandert alleen als er iets in de database is geschreven (total_changes telt alle wijzigingen)
+  let recCache = { v: -1, data: [] };
   function recurring() {
+    const v = one('SELECT total_changes() v').v;
+    if (recCache.v === v) return recCache.data;
+    const data = computeRecurring(); recCache = { v, data }; return data;
+  }
+  function computeRecurring() {
     const rows = q(`SELECT t.merchant, t.payee, t.date, t.amount, t.category_id FROM transactions t LEFT JOIN categories c ON c.id=t.category_id
       WHERE t.amount<0 AND (c.id IS NULL OR (c.kind='expense' AND COALESCE(c.key,'') NOT IN ('groceries','dining','drugstore','fuel','shopping','cash','transit','leisure'))) AND t.merchant<>'' AND t.date >= date((SELECT MAX(date) FROM transactions), '-18 months')`);
     const latest = one('SELECT MAX(date) d FROM transactions').d;
@@ -103,7 +121,7 @@ export function createApi(db, ctx = {}) {
       const tb = d.budget.reduce((a, b) => a + b.budget, 0);
       out.push({ type: tb && d.projection.expenses > tb ? 'warn' : 'info', text: `Op dit tempo kom je uit op ${eur(d.projection.expenses)} aan uitgaven${tb ? ` (budget ${eur(tb)})` : ''}.` });
     }
-    const big = one(`SELECT t.payee, -t.amount a FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} ORDER BY t.amount LIMIT 1`, m);
+    const big = one(`SELECT t.payee, -t.amount a FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE t.ym=? AND ${EXPENSE} ORDER BY t.amount LIMIT 1`, m);
     if (big) out.push({ type: 'info', text: `Grootste uitgave: ${big.payee} (${eur(big.a)}).` });
     if (totals.income > 0) {
       const rate = Math.round((totals.income - totals.expenses) / totals.income * 100);
@@ -118,17 +136,17 @@ export function createApi(db, ctx = {}) {
     const totals = monthTotals(m), prevMonth = addMonths(m, -1), prevTotals = monthTotals(prevMonth);
     const prevSpent = spentByCat(prevMonth);
     const byCategory = q(`SELECT c.id, COALESCE(c.name,'Niet gecategoriseerd') name, COALESCE(c.color,'#9ca3af') color, COALESCE(c.icon,'❔') icon, -SUM(t.amount) value
-      FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY c.id HAVING value > 0 ORDER BY value DESC`, m)
+      FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE t.ym=? AND ${EXPENSE} GROUP BY c.id HAVING value > 0 ORDER BY value DESC`, m)
       .map(c => ({ ...c, prev: prevSpent[c.id] ?? 0 }));
-    const trend = []; for (let i = 11; i >= 0; i--) { const mm = addMonths(m, -i); trend.push({ month: mm, ...monthTotals(mm) }); }
+    const trend = totalsByMonth(Array.from({ length: 12 }, (_, i) => addMonths(m, i - 11)));
     const topPayees = q(`SELECT MAX(t.payee) payee, t.merchant, MAX(COALESCE(c.icon,'❔')) icon, -SUM(t.amount) value, COUNT(*) n
-      FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY t.merchant HAVING value > 0 ORDER BY value DESC LIMIT 8`, m);
+      FROM tl t LEFT JOIN categories c ON c.id=t.category_id WHERE t.ym=? AND ${EXPENSE} GROUP BY t.merchant HAVING value > 0 ORDER BY value DESC LIMIT 8`, m);
     const budget = budgetRows(m).filter(b => b.budget > 0 || b.spent > 0);
     // cumulatieve uitgaven per dag (deze + vorige maand)
     const cum = mm => {
       const n = daysIn(mm), per = Array(n + 1).fill(0);
       q(`SELECT CAST(substr(t.date,9,2) AS INTEGER) d, -SUM(t.amount) v FROM tl t LEFT JOIN categories c ON c.id=t.category_id
-        WHERE substr(t.date,1,7)=? AND ${EXPENSE} GROUP BY d`, mm).forEach(r => { per[r.d] = r.v; });
+        WHERE t.ym=? AND ${EXPENSE} GROUP BY d`, mm).forEach(r => { per[r.d] = r.v; });
       let s = 0; return per.slice(1).map(v => (s += v));
     };
     const today = new Date().toISOString().slice(0, 10);
@@ -140,7 +158,7 @@ export function createApi(db, ctx = {}) {
     if (isCurrent && totals.expenses > 0) {
       // vaste lasten: wat al betaald is + wat nog verwacht wordt; variabel: huidig tempo
       const dom = +today.slice(8, 10), mset = new Set(rec.map(r => r.merchant));
-      const paid = q(`SELECT t.merchant, -SUM(t.amount) v FROM tl t WHERE substr(t.date,1,7)=? AND t.amount<0 GROUP BY t.merchant`, m)
+      const paid = q(`SELECT t.merchant, -SUM(t.amount) v FROM tl t WHERE t.ym=? AND t.amount<0 GROUP BY t.merchant`, m)
         .filter(r => mset.has(r.merchant));
       const paidSet = new Set(paid.map(r => r.merchant)), paidSum = paid.reduce((a, r) => a + r.v, 0);
       const remaining = rec.filter(r => !paidSet.has(r.merchant) && r.next.slice(0, 7) === m && r.next > today).reduce((a, r) => a + r.amount, 0);
@@ -154,7 +172,7 @@ export function createApi(db, ctx = {}) {
       upcoming, balanceHistory: balanceHistory(12),
       month: m, totals, prevTotals, byCategory, trend, topPayees, budget, cumul, projection, recurringMonthly,
       review: one(`SELECT COUNT(*) c FROM transactions t WHERE ${REVIEW}`).c,
-      months: q('SELECT DISTINCT substr(date,1,7) m FROM transactions ORDER BY m DESC').map(r => r.m),
+      months: q('SELECT DISTINCT ym m FROM transactions ORDER BY m DESC').map(r => r.m),
       accounts: accounts(), txCount: one('SELECT COUNT(*) c FROM transactions').c,
     };
     d.insights = insights(m, d);
@@ -164,7 +182,7 @@ export function createApi(db, ctx = {}) {
   function listTransactions(u) {
     const p = u.searchParams, where = [], args = [];
     const month = p.get('month');
-    if (month && monthRe.test(month)) { where.push('substr(t.date,1,7)=?'); args.push(month); }
+    if (month && monthRe.test(month)) { where.push('t.ym=?'); args.push(month); }
     if (p.get('status') === 'review') where.push(REVIEW);
     if (p.get('status') === 'uncategorized') where.push('t.category_id IS NULL');
     if (p.get('category') === 'none') where.push('t.category_id IS NULL');
@@ -202,14 +220,14 @@ export function createApi(db, ctx = {}) {
   function report(m, months) {
     const list = []; for (let i = months - 1; i >= 0; i--) list.push(addMonths(m, -i));
     const from = list[0] + '-01', to = list[list.length - 1] + '-31';
-    const cells = q(`SELECT c.id, c.kind, substr(t.date,1,7) mo, SUM(t.amount) v FROM tl t JOIN categories c ON c.id=t.category_id
+    const cells = q(`SELECT c.id, c.kind, t.ym mo, SUM(t.amount) v FROM tl t JOIN categories c ON c.id=t.category_id
       WHERE t.date>=? AND t.date<=? AND c.kind<>'transfer' GROUP BY c.id, mo`, from, to);
     const cats = q(`SELECT c.id, c.name, c.kind, c.color, c.icon, c.grp FROM categories c WHERE c.kind<>'transfer' ORDER BY c.kind DESC, ${GRP_ORDER}, c.grp, c.name`);
     const map = {}; cells.forEach(r => { (map[r.id] ||= {})[r.mo] = r.kind === 'income' ? r.v : -r.v; });
-    const unc = q(`SELECT substr(date,1,7) mo, SUM(amount) v FROM tl WHERE category_id IS NULL AND date>=? AND date<=? GROUP BY mo`, from, to);
+    const unc = q(`SELECT ym mo, SUM(amount) v FROM tl WHERE category_id IS NULL AND date>=? AND date<=? GROUP BY mo`, from, to);
     // inkomen: positieve bedragen; uitgaven: positief = uitgave (terugbetalingen verlagen)
     const rows = cats.map(c => ({ ...c, values: list.map(mo => map[c.id]?.[mo] ?? 0) })).filter(r => r.values.some(v => v !== 0));
-    return { months: list, rows, uncategorized: list.map(mo => -(unc.find(u => u.mo === mo)?.v ?? 0)), totals: list.map(mo => monthTotals(mo)) };
+    return { months: list, rows, uncategorized: list.map(mo => -(unc.find(u => u.mo === mo)?.v ?? 0)), totals: totalsByMonth(list).map(({ income, expenses }) => ({ income, expenses })) };
   }
 
   function detail(u) {
@@ -227,7 +245,7 @@ export function createApi(db, ctx = {}) {
       where = 't.merchant=?'; args = [p.get('merchant')];
       head = { type: 'merchant', merchant: p.get('merchant'), title: t.payee, icon: '🏪', color: '#6b7280' };
     } else throw httpErr(400, 'category of merchant vereist');
-    const rows = q(`SELECT substr(t.date,1,7) mo, SUM(t.amount) v, COUNT(*) n FROM tl t WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY mo`, ...args, from, to);
+    const rows = q(`SELECT t.ym mo, SUM(t.amount) v, COUNT(*) n FROM tl t WHERE ${where} AND t.date>=? AND t.date<=? GROUP BY mo`, ...args, from, to);
     const net = rows.reduce((a, r) => a + r.v, 0), sign = kind === 'income' || (head.type === 'merchant' && net > 0) ? 1 : -1;
     const by = Object.fromEntries(rows.map(r => [r.mo, r.v * sign]));
     const monthly = list.map(mo => ({ month: mo, value: by[mo] ?? 0 }));
@@ -309,7 +327,7 @@ export function createApi(db, ctx = {}) {
       if (b.category_id) needCat(b.category_id);
       return withUndo([id], () => {
         setCategory(db, [id], b.category_id || null);
-        return { ok: true, similar: b.category_id ? recategorize(db) : 0 };
+        return { ok: true, similar: b.category_id ? reclassFor([id]) : 0 };
       });
     },
     'DELETE /api/transactions/:id': (_, { id }) => { run('DELETE FROM transactions WHERE id=?', id); return { ok: true }; },
@@ -318,10 +336,10 @@ export function createApi(db, ctx = {}) {
       if (b.category_id) needCat(b.category_id);
       return withUndo(b.ids, () => {
         const n = setCategory(db, b.ids, b.category_id || null);
-        return { ok: true, updated: n, similar: b.category_id ? recategorize(db) : 0 };
+        return { ok: true, updated: n, similar: b.category_id ? reclassFor(b.ids) : 0 };
       });
     },
-    'POST /api/transactions/confirm': b => withUndo(b.ids || [], () => ({ confirmed: confirmSuggestions(db, b.ids || []), similar: recategorize(db) })),
+    'POST /api/transactions/confirm': b => withUndo(b.ids || [], () => ({ confirmed: confirmSuggestions(db, b.ids || []), similar: reclassFor(b.ids || []) })),
     'POST /api/undo': b => {
       const snap = undoStack.get(Number(b.id));
       if (!snap) throw httpErr(404, 'Er is niets meer om ongedaan te maken');
