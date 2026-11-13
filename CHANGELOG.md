@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.7.0
+- **Mobiele browser**: onderbalk als navigatie, één kolom, transacties als kaarten, bottom-sheet dialogen, toevoegen aan beginscherm (webapp-manifest).
+- **Ongebruikte categorieën opruimen** (Categorieën & regels): verwijdert categorieën zonder transacties, regels, geheugen of budget; systeemcategorieën blijven.
+
 ## 2.6.0
 - **Servermodus** (Docker/Proxmox): `HOST`/`PORT`/`MYBUDGETS_PASSWORD`, wachtwoordbeveiliging (HTTP Basic), dagelijkse back-ups, back-up downloaden, Dockerfile en compose-bestand. Meerdere gebruikers zien dezelfde gegevens.
 - Windows-build (installer en portable `.exe`) via GitHub Actions.

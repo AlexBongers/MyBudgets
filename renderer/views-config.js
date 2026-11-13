@@ -17,8 +17,18 @@ async function catTab() {
       <td><select data-f="kind">${Object.entries(kinds).map(([k, l]) => `<option value="${k}" ${c.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
       <td><input type="color" data-f="color" value="${c.color}"></td><td class="num"><button class="btn sm danger" data-del>✕</button></td></tr>`).join('')}</tbody></table></div></div>
     <datalist id="grps">${groups.map(g => `<option value="${esc(g)}">`).join('')}</datalist>
+    <div class="row" style="margin-top:16px"><button class="btn" id="prune">🧹 Ongebruikte categorieën opruimen…</button></div>
     <form class="card row" id="newcat" style="margin-top:16px"><b>Nieuwe categorie</b><input name="icon" value="🏷️" style="width:48px;text-align:center"><input name="name" placeholder="Naam" required><input name="grp" list="grps" placeholder="Groep" value="Overig" style="width:140px">
       <select name="kind"><option value="expense">Uitgave</option><option value="income">Inkomen</option><option value="transfer">Overboeking</option></select><input type="color" name="color" value="#6b7280"><button class="btn primary">Toevoegen</button></form>`;
+  $('#prune').addEventListener('click', guard(async () => {
+    const un = await GET('/categories/unused');
+    if (!un.length) return toast('Geen ongebruikte categorieën');
+    const m = modal(`<h3>${un.length} ongebruikte categorie${un.length === 1 ? '' : 'ën'} opruimen?</h3>
+      <p class="muted" style="margin-top:-4px">Zonder transacties, regels, geheugen of budget. Categorieën die de app zelf nodig heeft (overboeking, salaris, contant geld, overig) blijven staan.</p>
+      <div class="row" style="gap:6px;max-height:260px;overflow:auto">${un.map(c => `<span class="chip" style="--c:#888">${c.icon} ${esc(c.name)}</span>`).join('')}</div>
+      <div class="foot"><button class="btn" data-close>Annuleren</button><button class="btn danger" id="go">Verwijderen</button></div>`);
+    m.$('#go').onclick = guard(async () => { const r = await POST('/categories/prune', {}); m.close(); await refreshMeta(); toast(`${r.removed} categorie${r.removed === 1 ? '' : 'ën'} verwijderd`); V.categories(); });
+  }));
   $$('#tabbody tr[data-id]').forEach(tr => {
     const id = +tr.dataset.id;
     tr.addEventListener('change', guard(async e => { const f = e.target.dataset.f; if (!f) return; await PUT('/categories/' + id, { [f]: e.target.value }); await refreshMeta(); toast('Opgeslagen'); }));

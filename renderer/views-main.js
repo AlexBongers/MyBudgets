@@ -126,7 +126,7 @@ V.transactions = async () => {
       <label class="row small"><input type="checkbox" id="frev" ${f.status === 'review' ? 'checked' : ''}> Alleen te beoordelen</label>
       ${f.merchant ? `<span class="chip" style="--c:#0a84ff">Tegenpartij: ${esc(f.merchant)} <a href="#" id="clrm">✕</a></span>` : ''}
     </div>
-    <div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr>
+    <div class="card" style="padding:0"><div class="tablewrap"><table class="txtable"><thead><tr>
       <th style="width:30px"><input type="checkbox" id="selall"></th>
       <th class="sortable" data-sort="date">Datum</th><th class="sortable" data-sort="payee">Tegenpartij</th><th>Categorie</th><th class="sortable num" data-sort="amount">Bedrag</th></tr></thead>
       <tbody id="rows"></tbody></table></div><div class="row between" style="padding:10px 16px;border-top:1px solid var(--line)"><span class="muted small" id="summary"></span><button class="btn sm" id="more" hidden>Meer laden</button></div></div>
