@@ -12,7 +12,7 @@ V.year = async () => {
   const cmp = !d.prevComplete ? 'geen vergelijking: vorig jaar niet volledig' : d.partial ? `t/m ${fmtDate(d.to)} · ${deltaWord(d.year)}` : deltaWord(d.year);
   const m = render(`
     <div class="row between" style="margin-bottom:16px">
-      <div class="row"><button class="icon-btn" id="yprev" ${d.years.includes(String(d.year - 1)) ? '' : 'disabled'} aria-label="Vorig jaar">‹</button><h2 style="margin:0;font-size:22px;text-transform:none;letter-spacing:-.01em;color:var(--text)">${d.year}</h2>
+      <div class="row"><button class="icon-btn" id="yprev" ${d.years.includes(String(d.year - 1)) ? '' : 'disabled'} aria-label="Vorig jaar">‹</button><h2 style="margin:0 4px;font:600 32px/1 var(--display);letter-spacing:-.02em;color:var(--text)">${d.year}</h2>
         <button class="icon-btn" id="ynext" ${d.years.includes(String(+d.year + 1)) ? '' : 'disabled'} aria-label="Volgend jaar">›</button>
         ${d.partial ? `<span class="tag blue">loopt nog — t/m ${fmtDate(d.to)}</span>` : ''}</div>
       <div class="seg" id="yseg">${[...d.years].reverse().map(y => `<button data-y="${y}" class="${y === d.year ? 'on' : ''}">${y}</button>`).join('')}</div>
@@ -25,7 +25,7 @@ V.year = async () => {
     </div>
     ${!d.txCount ? '<div class="card empty">Geen transacties in dit jaar.</div>' : `
     <div class="grid g21" style="margin-bottom:16px">
-      <div class="card"><h2>Per maand <span class="right"><span class="dot" style="background:var(--good)"></span> inkomsten &nbsp;<span class="dot" style="background:var(--bad)"></span> uitgaven</span></h2>${barChart(d.months, null)}
+      <div class="card"><h2>Per maand <span class="right"><span class="dot" style="background:var(--inc)"></span> inkomsten &nbsp;<span class="dot" style="background:var(--exp)"></span> uitgaven</span></h2>${barChart(d.months, null)}
         <div class="row small muted" style="gap:6px 18px;margin-top:6px">${hi ? `<span>Duurste maand: <b style="color:var(--text)">${monthName(hi.month)}</b> (${eur0(hi.expenses)})</span>` : ''}${lo ? `<span>Goedkoopste: <b style="color:var(--text)">${monthName(lo.month)}</b> (${eur0(lo.expenses)})</span>` : ''}${active.length ? `<span>Beste maand: <b style="color:var(--text)">${monthName(active.reduce((a, b) => (b.income - b.expenses > a.income - a.expenses ? b : a)).month)}</b></span>` : ''}</div></div>
       <div class="card"><h2>Inkomsten per bron</h2>${d.income.length ? d.income.slice(0, 6).map(i => `<div style="margin-bottom:10px" data-cat="${i.id ?? ''}"><div class="row between small"><span>${i.icon} ${esc(i.name)}</span><b>${eur0(i.value)}</b></div><div class="bar"><i style="width:${Math.max(2, i.value / t.income * 100)}%;background:${i.color}"></i></div></div>`).join('') : '<div class="empty">Geen inkomsten</div>'}</div>
     </div>

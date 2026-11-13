@@ -65,7 +65,7 @@ V.reports = async () => {
   const r = await GET(`/report?month=${S.month}&months=${n}`);
   const income = r.rows.filter(x => x.kind === 'income'), exp = r.rows.filter(x => x.kind === 'expense');
   const sum = a => a.reduce((x, y) => x + y, 0);
-  const cellStyle = (v, max, good) => v ? `background:color-mix(in srgb,${good ? 'var(--good)' : 'var(--bad)'} ${Math.round(Math.min(1, Math.abs(v) / (max || 1)) * 34)}%,transparent)` : '';
+  const cellStyle = (v, max, good) => v ? `background:color-mix(in srgb,${good ? 'var(--inc)' : 'var(--exp)'} ${Math.round(Math.min(1, Math.abs(v) / (max || 1)) * 34)}%,transparent)` : '';
   const line = (x, good) => { const mx = Math.max(...x.values.map(Math.abs), 1);
     return `<tr><td class="nowrap"><a href="#" data-opencat="${x.id}" style="color:inherit;text-decoration:none">${x.icon} ${esc(x.name)}</a></td>${x.values.map((v, i) => `<td class="num cell" data-cat="${x.id}" data-month="${r.months[i]}" style="${cellStyle(v, mx, good)}">${v ? num0(v) : '<span class="faint">·</span>'}</td>`).join('')}<td class="num muted">${num0(Math.round(sum(x.values) / n))}</td><td class="num"><b>${num0(sum(x.values))}</b></td></tr>`; };
   const groups = [...new Set(exp.map(x => x.grp))];

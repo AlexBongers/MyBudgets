@@ -8,7 +8,7 @@ const TITLES = Object.fromEntries([...TABS, ['import', 'Importeren'], ['settings
 const NOMONTH = ['categories', 'import', 'settings', 'recurring', 'review', 'actual', 'year'];
 
 function updateNav() {
-  $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" ${S.tab === k ? 'aria-current="page"' : ''} data-tab="${k}">${icon(k)}<span>${l}</span>${k === 'review' && S.review ? `<span class="badge">${S.review}</span>` : ''}</button>`).join('')
+  $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" ${S.tab === k ? 'aria-current="page"' : ''} data-tab="${k}">${icon(k)}<span class="l-full">${l}</span><span class="l-short">${SHORT[k] || l}</span>${k === 'review' && S.review ? `<span class="badge">${S.review}</span>` : ''}</button>`).join('')
     + `<div class="nav-sep"></div>` + [['import', 'Importeren'], ['settings', 'Instellingen']].map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" data-tab="${k}">${icon(k)}<span>${l}</span></button>`).join('');
   // Telefoon: vier hoofdschermen + Meer (de rest staat in een sheet)
   const inMore = !PRIMARY.includes(S.tab);

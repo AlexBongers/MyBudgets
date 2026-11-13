@@ -10,7 +10,7 @@ Vereist [Node.js](https://nodejs.org) ≥ 22.13 (aanbevolen: LTS).
 ```bash
 npm install
 npm start          # opent de app
-npm test           # parser, categoriseermodule, corpus, service, server (71 tests)
+npm test           # parser, categoriseermodule, corpus, service, server (73 tests)
 npm run e2e        # doorloopt de echte app (18 controles, tijdelijke database)
 npm run e2e:mobile # browserversie op 7 schermformaten (telefoon t/m foldable)
 npm run dist       # bouwt dist/MyBudgets-*.dmg (Apple Silicon + Intel)
@@ -134,7 +134,7 @@ HOST=0.0.0.0 PORT=3000 MYBUDGETS_PASSWORD='lang-wachtwoord' DB_PATH=/var/lib/myb
 electron/   hoofdproces (venster, menu, IPC, bestandsdialogen) + preload
 src/        rabobank (parser), normalize, merchants, categorizer, db (schema/migraties/schrijven), reports (leesmodel),
             service (API-routes), recurring, actual + importer + zip (Actual-import), util (gedeelde helpers), server (dev)
-renderer/   interface (vanilla JS/SVG, geen dependencies)
+renderer/   interface (vanilla JS/SVG, geen dependencies; lettertypen Geist en Fraunces lokaal in renderer/fonts, SIL OFL)
 samples/    generate.js en rabobank-demo.csv (fictieve data)
 scripts/    bench.js
 test/       node:test

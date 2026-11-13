@@ -383,7 +383,7 @@ export function applyPlan(db, plan, { name = '' } = {}) {
   out.recategorized = recategorize(db); // nieuwe transacties zonder Actual-categorie krijgen de automatische indeling
   return out;
 }
-const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#6366f1'];
+const COLORS = ['#2f5f8a', '#d98a2b', '#2a8a80', '#c8553d', '#6a5aa8', '#3e8fa8', '#b04a7a', '#7a9a3a', '#e0814f', '#4f4a8a'];
 const pickColor = n => COLORS[n % COLORS.length];
 
 // ---------------------------------------------------------------- budgetten

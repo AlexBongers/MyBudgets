@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.9.0
+- **Nieuwe look** ("kasboek"): warm papier en inkt met een diepgroen accent, eigen lettertypen (Geist voor de interface, Fraunces voor titels en bedragen; lokaal meegeleverd, OFL-licentie), kerncijfers als één doorlopende strook, rustiger kaarten, knoppen en velden, zwevende tabbalk op de telefoon.
+- Grafieken: inkomsten blauw en uitgaven koraal (getoetst op kleurenblindheid, licht en donker), staven met afgeronde top op de basislijn, gestippelde hulplijnen, donut met haarlijnen tussen de segmenten, saldo-verloop met verloop-vulling.
+- Categoriekleuren in afgestemde, per groep verwante tinten; bestaande categorieën krijgen de nieuwe kleur alleen als je de standaardkleur nooit had aangepast.
+- Kleine dingen: rail toont korte namen, geen toetsenbordmarkering op touch, teksten die naar ⌘O verwezen passen zich aan.
+
 ## 2.8.1
 - Versienummer zichtbaar: onderin de zijbalk, in Instellingen → Weergave en in de Meer-sheet op de telefoon; ook via `/api/version`.
 

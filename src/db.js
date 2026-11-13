@@ -17,6 +17,7 @@ export function openDb(path = 'data/budget.db') {
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   migrate(db);
   if (db.prepare('SELECT COUNT(*) c FROM categories').get().c === 0) seedCategories(db);
+  else refreshDefaultColors(db);
   return db;
 }
 
@@ -112,37 +113,44 @@ function migrate(db) {
 
 // key, naam, soort, groep, icoon, kleur
 export const DEFAULT_CATEGORIES = [
-  ['salary', 'Salaris', 'income', 'Inkomen', '💼', '#16a34a'],
-  ['benefits', 'Toeslagen & uitkeringen', 'income', 'Inkomen', '🏛️', '#22c55e'],
-  ['other_income', 'Overig inkomen', 'income', 'Inkomen', '💶', '#4ade80'],
-  ['rent', 'Huur / hypotheek', 'expense', 'Wonen', '🏠', '#3b82f6'],
-  ['energy', 'Energie', 'expense', 'Wonen', '💡', '#eab308'],
-  ['water', 'Water', 'expense', 'Wonen', '🚰', '#06b6d4'],
-  ['telecom', 'Internet & telefoon', 'expense', 'Wonen', '📡', '#0ea5e9'],
-  ['taxes', 'Belastingen & heffingen', 'expense', 'Wonen', '🧾', '#64748b'],
-  ['home', 'Inrichting & klussen', 'expense', 'Wonen', '🛠️', '#60a5fa'],
-  ['groceries', 'Boodschappen', 'expense', 'Dagelijks', '🛒', '#f59e0b'],
-  ['dining', 'Uit eten & drinken', 'expense', 'Dagelijks', '🍽️', '#ef4444'],
-  ['drugstore', 'Drogist & verzorging', 'expense', 'Dagelijks', '🧴', '#f472b6'],
-  ['transit', 'Openbaar vervoer', 'expense', 'Vervoer', '🚆', '#8b5cf6'],
-  ['fuel', 'Brandstof & laden', 'expense', 'Vervoer', '⛽', '#a78bfa'],
-  ['car', 'Auto', 'expense', 'Vervoer', '🚗', '#6366f1'],
-  ['healthins', 'Zorgverzekering', 'expense', 'Zorg & verzekeringen', '🩺', '#14b8a6'],
-  ['health', 'Zorgkosten', 'expense', 'Zorg & verzekeringen', '💊', '#2dd4bf'],
-  ['insurance', 'Verzekeringen', 'expense', 'Zorg & verzekeringen', '🛡️', '#0d9488'],
-  ['subscriptions', 'Abonnementen', 'expense', 'Vrije tijd', '📺', '#ec4899'],
-  ['shopping', 'Kleding & shopping', 'expense', 'Vrije tijd', '🛍️', '#f97316'],
-  ['leisure', 'Uitjes & entertainment', 'expense', 'Vrije tijd', '🎟️', '#a855f7'],
-  ['travel', 'Vakantie & reizen', 'expense', 'Vrije tijd', '✈️', '#d946ef'],
-  ['sports', 'Sport', 'expense', 'Vrije tijd', '🏋️', '#84cc16'],
-  ['gifts', 'Cadeaus & goede doelen', 'expense', 'Vrije tijd', '🎁', '#fb7185'],
-  ['education', 'Onderwijs & kinderopvang', 'expense', 'Overig', '🎓', '#38bdf8'],
-  ['bank', 'Bankkosten', 'expense', 'Overig', '🏦', '#94a3b8'],
-  ['cash', 'Contant geld', 'expense', 'Overig', '💵', '#78716c'],
-  ['other', 'Overig', 'expense', 'Overig', '🧩', '#6b7280'],
-  ['transfer', 'Sparen / eigen rekening', 'transfer', 'Overboekingen', '🔁', '#94a3b8'],
-  ['invest', 'Beleggen & pensioen', 'transfer', 'Overboekingen', '📈', '#64748b'],
+  ['salary', 'Salaris', 'income', 'Inkomen', '💼', '#2f7d57'],
+  ['benefits', 'Toeslagen & uitkeringen', 'income', 'Inkomen', '🏛️', '#4c9a6e'],
+  ['other_income', 'Overig inkomen', 'income', 'Inkomen', '💶', '#7cb58f'],
+  ['rent', 'Huur / hypotheek', 'expense', 'Wonen', '🏠', '#2f5f8a'],
+  ['energy', 'Energie', 'expense', 'Wonen', '💡', '#d9a227'],
+  ['water', 'Water', 'expense', 'Wonen', '🚰', '#3e8fa8'],
+  ['telecom', 'Internet & telefoon', 'expense', 'Wonen', '📡', '#5a7fb8'],
+  ['taxes', 'Belastingen & heffingen', 'expense', 'Wonen', '🧾', '#6b6f7a'],
+  ['home', 'Inrichting & klussen', 'expense', 'Wonen', '🛠️', '#8aa2c8'],
+  ['groceries', 'Boodschappen', 'expense', 'Dagelijks', '🛒', '#d98a2b'],
+  ['dining', 'Uit eten & drinken', 'expense', 'Dagelijks', '🍽️', '#c8553d'],
+  ['drugstore', 'Drogist & verzorging', 'expense', 'Dagelijks', '🧴', '#d07a96'],
+  ['transit', 'Openbaar vervoer', 'expense', 'Vervoer', '🚆', '#6a5aa8'],
+  ['fuel', 'Brandstof & laden', 'expense', 'Vervoer', '⛽', '#8f7cc4'],
+  ['car', 'Auto', 'expense', 'Vervoer', '🚗', '#4f4a8a'],
+  ['healthins', 'Zorgverzekering', 'expense', 'Zorg & verzekeringen', '🩺', '#2a8a80'],
+  ['health', 'Zorgkosten', 'expense', 'Zorg & verzekeringen', '💊', '#5fb3a8'],
+  ['insurance', 'Verzekeringen', 'expense', 'Zorg & verzekeringen', '🛡️', '#1f6b66'],
+  ['subscriptions', 'Abonnementen', 'expense', 'Vrije tijd', '📺', '#b04a7a'],
+  ['shopping', 'Kleding & shopping', 'expense', 'Vrije tijd', '🛍️', '#e0814f'],
+  ['leisure', 'Uitjes & entertainment', 'expense', 'Vrije tijd', '🎟️', '#9a5fb0'],
+  ['travel', 'Vakantie & reizen', 'expense', 'Vrije tijd', '✈️', '#c06aa6'],
+  ['sports', 'Sport', 'expense', 'Vrije tijd', '🏋️', '#7a9a3a'],
+  ['gifts', 'Cadeaus & goede doelen', 'expense', 'Vrije tijd', '🎁', '#e07a7a'],
+  ['education', 'Onderwijs & kinderopvang', 'expense', 'Overig', '🎓', '#4a9cc4'],
+  ['bank', 'Bankkosten', 'expense', 'Overig', '🏦', '#8c8a80'],
+  ['cash', 'Contant geld', 'expense', 'Overig', '💵', '#7a6f62'],
+  ['other', 'Overig', 'expense', 'Overig', '🧩', '#9a958a'],
+  ['transfer', 'Sparen / eigen rekening', 'transfer', 'Overboekingen', '🔁', '#8c8a80'],
+  ['invest', 'Beleggen & pensioen', 'transfer', 'Overboekingen', '📈', '#6b6f7a'],
 ];
+
+// Kleuren van vóór versie 2.9; categorieën die nog precies die standaardkleur hebben krijgen de nieuwe tint.
+const OLD_DEFAULT_COLORS = { salary: '#16a34a', benefits: '#22c55e', other_income: '#4ade80', rent: '#3b82f6', energy: '#eab308', water: '#06b6d4', telecom: '#0ea5e9', taxes: '#64748b', home: '#60a5fa', groceries: '#f59e0b', dining: '#ef4444', drugstore: '#f472b6', transit: '#8b5cf6', fuel: '#a78bfa', car: '#6366f1', healthins: '#14b8a6', health: '#2dd4bf', insurance: '#0d9488', subscriptions: '#ec4899', shopping: '#f97316', leisure: '#a855f7', travel: '#d946ef', sports: '#84cc16', gifts: '#fb7185', education: '#38bdf8', bank: '#94a3b8', cash: '#78716c', other: '#6b7280', transfer: '#94a3b8', invest: '#64748b' };
+function refreshDefaultColors(db) {
+  const up = db.prepare('UPDATE categories SET color=? WHERE key=? AND color=?');
+  withTx(db, () => { for (const [key, , , , , color] of DEFAULT_CATEGORIES) if (OLD_DEFAULT_COLORS[key]) up.run(color, key, OLD_DEFAULT_COLORS[key]); });
+}
 
 function seedCategories(db) {
   const ins = db.prepare('INSERT INTO categories (key, name, kind, grp, icon, color) VALUES (?,?,?,?,?,?)');
