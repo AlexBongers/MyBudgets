@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.8.1
+- Versienummer zichtbaar: onderin de zijbalk, in Instellingen → Weergave en in de Meer-sheet op de telefoon; ook via `/api/version`.
+
 ## 2.8.0
 - **Telefoon**: tabbalk onderin (Dashboard, Beoordelen, Transacties, Budget) met *Meer*-sheet voor de rest en het totaalsaldo; dialogen als sheet van onderen; filters inklapbaar; transacties, budget, vaste lasten, categorieën en regels als compacte kaarten.
 - **Foldables en tablets**: smalle navigatierail tussen 600 en 1100 px; indeling volgt de werkelijk beschikbare breedte (container queries). Uit- of dichtvouwen tekent het scherm opnieuw. Op apparaten met een fysieke vouw lopen kolommen om het scharnier heen (Viewport Segments).

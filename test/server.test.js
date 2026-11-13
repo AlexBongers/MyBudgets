@@ -53,3 +53,9 @@ test('servermodus: herstel van back-up wordt gevalideerd en bij start toegepast'
   const c = openDb(live); assert.equal(c.prepare('SELECT name FROM accounts').get().name, 'NIEUW'); c.close();
   assert.ok(existsSync(join(dir, 'backups')));                                                                                         // veiligheidskopie van de oude gegevens
 });
+
+test('versie-endpoint geeft de versie uit package.json', async () => {
+  const { createApi, VERSION } = await import('../src/service.js');
+  const api = createApi(openDb(':memory:'));
+  assert.match(VERSION, /^\d+\.\d+\.\d+$/); assert.deepEqual(await api('GET', '/api/version'), { version: VERSION });
+});
