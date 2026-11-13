@@ -177,7 +177,7 @@ V.settings = async () => {
   const theme = pref.get('theme') || 'system';
   const m = render(`<div class="grid g2">
     <div class="card"><h2>Weergave</h2><div class="row between"><span>Thema</span><div class="seg" id="theme">${[['system', 'Systeem'], ['light', 'Licht'], ['dark', 'Donker']].map(([v, l]) => `<button data-v="${v}" class="${theme === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
-      <p class="muted small" style="margin-bottom:0">Standaard volgt MyBudgets de instelling van je ${window.native ? 'computer' : 'apparaat'}.</p></div>
+      <p class="muted small" style="margin-bottom:0">Standaard volgt MyBudgets de instelling van je ${window.native ? 'computer' : 'apparaat'}.</p>${S.version ? `<p class="faint small" style="margin:8px 0 0">Versie ${esc(S.version)}</p>` : ''}</div>
     <div class="card"><h2>Rekeningen</h2>${accs.length ? accs.map(a => `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)" data-id="${a.id}"><div><input data-name value="${esc(a.name)}" style="width:190px"><div class="small muted" style="margin-top:3px">${esc(a.iban)} · ${a.count} transacties${a.from ? ` · ${fmtDate(a.from)} – ${fmtDate(a.to)}` : ''}</div></div><b>${a.balance != null ? eur(a.balance) : ''}</b></div>`).join('') : '<div class="empty">Nog geen rekeningen. Ze verschijnen na je eerste import.</div>'}</div>
     <div class="card"><h2>Gegevens</h2><div class="stack">
       <div class="row"><button class="btn" id="exp">Transacties exporteren (CSV)…</button></div>

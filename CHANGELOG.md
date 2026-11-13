@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.9.0
+- **Nieuwe look** ("kasboek"): warm papier en inkt met een diepgroen accent, eigen lettertypen (Geist voor de interface, Fraunces voor titels en bedragen; lokaal meegeleverd, OFL-licentie), kerncijfers als één doorlopende strook, rustiger kaarten, knoppen en velden, zwevende tabbalk op de telefoon.
+- Grafieken: inkomsten blauw en uitgaven koraal (getoetst op kleurenblindheid, licht en donker), staven met afgeronde top op de basislijn, gestippelde hulplijnen, donut met haarlijnen tussen de segmenten, saldo-verloop met verloop-vulling.
+- Categoriekleuren in afgestemde, per groep verwante tinten; bestaande categorieën krijgen de nieuwe kleur alleen als je de standaardkleur nooit had aangepast.
+- Kleine dingen: rail toont korte namen, geen toetsenbordmarkering op touch, teksten die naar ⌘O verwezen passen zich aan.
+
+## 2.8.1
+- Versienummer zichtbaar: onderin de zijbalk, in Instellingen → Weergave en in de Meer-sheet op de telefoon; ook via `/api/version`.
+
 ## 2.8.0
 - **Telefoon**: tabbalk onderin (Dashboard, Beoordelen, Transacties, Budget) met *Meer*-sheet voor de rest en het totaalsaldo; dialogen als sheet van onderen; filters inklapbaar; transacties, budget, vaste lasten, categorieën en regels als compacte kaarten.
 - **Foldables en tablets**: smalle navigatierail tussen 600 en 1100 px; indeling volgt de werkelijk beschikbare breedte (container queries). Uit- of dichtvouwen tekent het scherm opnieuw. Op apparaten met een fysieke vouw lopen kolommen om het scharnier heen (Viewport Segments).

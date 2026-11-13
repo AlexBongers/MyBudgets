@@ -115,3 +115,15 @@ test('ongebruikte categorieën opruimen: alleen echt ongebruikte, systeemcategor
   assert.ok(db.prepare("SELECT 1 FROM categories WHERE name='MetBudget'").get());
   assert.equal(db.prepare('SELECT COUNT(*) c FROM transactions WHERE category_id IS NULL').get().c, 0 + db.prepare('SELECT COUNT(*) c FROM transactions WHERE category_id IS NULL').get().c);
 });
+
+test('standaardkleuren: nieuwe tint alleen als de oude standaardkleur nooit is aangepast', async () => {
+  const { mkdtempSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+  const file = join(mkdtempSync(join(tmpdir(), 'mb-col-')), 'b.db');
+  let db = openDb(file);
+  db.prepare("UPDATE categories SET color='#3b82f6' WHERE key='rent'").run();      // oude standaard
+  db.prepare("UPDATE categories SET color='#123456' WHERE key='groceries'").run(); // eigen keuze
+  db.close(); db = openDb(file);
+  assert.equal(db.prepare("SELECT color FROM categories WHERE key='rent'").get().color, '#2f5f8a');
+  assert.equal(db.prepare("SELECT color FROM categories WHERE key='groceries'").get().color, '#123456');
+  db.close();
+});

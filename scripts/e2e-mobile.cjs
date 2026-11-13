@@ -54,6 +54,10 @@ const VIEWS = ['dashboard', 'review', 'transactions', 'budget', 'recurring', 're
     ok('dichtvouwen: tabbalk terug', await p.locator('#tabbar').isVisible());
     await ctx.close();
     ok('geen fouten in de pagina', errs.length === 0); if (errs.length) console.log(errs);
-  } finally { await browser.close(); srv.kill(); fs.rmSync(tmp, { recursive: true, force: true }); }
+  } finally {
+    await browser.close(); srv.kill();
+    await new Promise(r => (srv.exitCode !== null ? r() : srv.once('exit', r)));
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* tijdelijke map; niet erg */ }
+  }
   console.log(failed ? `\n${failed} controle(s) mislukt` : '\nAlles geslaagd'); process.exit(failed ? 1 : 0);
 })().catch(e => { console.error('FOUT', e.message); process.exit(1); });

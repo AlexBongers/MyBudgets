@@ -13,6 +13,7 @@ import { MONTH_RE as monthRe, httpErr } from './util.js';
 
 export { httpErr };
 
+export const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const PROTECTED_KEYS = ['transfer', 'cash', 'salary', 'other', 'other_income'];
 
 export function createApi(db, ctx = {}) {
@@ -62,6 +63,7 @@ export function createApi(db, ctx = {}) {
         transactions: q(`SELECT id, date, amount, payee, description FROM transactions WHERE payee LIKE ? OR description LIKE ? ORDER BY date DESC LIMIT 6`, like, like),
       };
     },
+    'GET /api/version': () => ({ version: VERSION }),
     'GET /api/categories': () => q(`SELECT c.* FROM categories c ORDER BY CASE c.kind WHEN 'income' THEN 0 WHEN 'expense' THEN 1 ELSE 2 END, ${GRP_ORDER}, c.grp, c.name`),
     // Ongebruikt = geen transacties, splitsingen, regels, geheugen of ingevuld budget. Categorieën die de categoriseermodule zelf nodig heeft blijven staan.
     'GET /api/categories/unused': () => unusedCategories(),

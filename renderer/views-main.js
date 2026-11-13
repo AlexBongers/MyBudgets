@@ -8,7 +8,7 @@ function emptyHero() {
     <div class="row" style="justify-content:center;margin-bottom:26px"><button class="btn primary" data-act="import">Rabobank CSV kiezen…</button><button class="btn" data-act="demo">Probeer met voorbeelddata</button></div>
     <div class="card" style="text-align:left"><h2>Zo exporteer je uit Rabo Internetbankieren</h2>
       <ol class="steps"><li>Log in en open je <b>betaalrekening</b> → <b>Transacties</b>.</li><li>Kies <b>Downloaden</b> en selecteer de periode (bijv. het hele laatste jaar).</li>
-      <li>Kies formaat <b>CSV</b> (kommagescheiden) en download het bestand.</li><li>Sleep het bestand in dit venster of kies <kbd>⌘O</kbd>.</li></ol></div></div>`;
+      <li>Kies formaat <b>CSV</b> (kommagescheiden) en download het bestand.</li><li>${window.native ? 'Sleep het bestand in dit venster of kies <kbd>⌘O</kbd>.' : 'Sleep het bestand hierheen of tik op <b>Rabobank CSV kiezen</b>.'}</li></ol></div></div>`;
 }
 
 V.dashboard = async () => {
@@ -32,7 +32,7 @@ V.dashboard = async () => {
       <div class="card"><h2>Inzichten</h2>${d.insights.length ? d.insights.map(i => `<div class="insight"><span class="ic ${i.type}"></span><span>${esc(i.text)}</span></div>`).join('') : '<div class="empty">Nog geen inzichten</div>'}</div>
     </div>
     <div class="grid g2" style="margin-bottom:16px">
-      <div class="card"><h2>Laatste 12 maanden <span class="right"><span class="dot" style="background:var(--good)"></span> inkomsten &nbsp;<span class="dot" style="background:var(--bad)"></span> uitgaven</span></h2>${barChart(d.trend, d.month)}</div>
+      <div class="card"><h2>Laatste 12 maanden <span class="right"><span class="dot" style="background:var(--inc)"></span> inkomsten &nbsp;<span class="dot" style="background:var(--exp)"></span> uitgaven</span></h2>${barChart(d.trend, d.month)}</div>
       <div class="card"><h2>Uitgaven per categorie</h2><div class="row donut-row" style="gap:16px;align-items:flex-start;flex-wrap:nowrap" id="catdonut">${donut(d.byCategory)}
         <div class="legend">${d.byCategory.slice(0, 9).map(c => `<div class="li" data-cat="${c.id ?? ''}"><span><i class="dot" style="background:${c.color}"></i> ${c.icon} ${esc(c.name)}</span><span class="nowrap"><b>${eur0(c.value)}</b> ${c.prev && Math.abs(c.value - c.prev) > c.prev * 0.05 ? deltaChip(c.value, c.prev, true) : ''}</span></div>`).join('')}</div></div></div>
     </div>
@@ -103,7 +103,7 @@ V.review = async () => {
     else if (e.key === 'r') { e.preventDefault(); card.querySelector('[data-rule]').click(); }
     else if (e.key === 'v') { e.preventDefault(); card.querySelector('[data-view]').click(); }
   });
-  focusCard(0);
+  if (!matchMedia('(pointer:coarse)').matches) focusCard(0);   // op touch geen toetsenbordmarkering
   $('#acceptall')?.addEventListener('click', guard(async () => {
     if (!(await ask('Alle suggesties bevestigen?', `Je bevestigt de voorgestelde categorie voor ${withSug.length} tegenpartijen. Je kunt dit later altijd nog aanpassen.`, 'Bevestigen'))) return;
     const r = await POST('/transactions/confirm', { ids: withSug.flatMap(g => g.ids) }); toast(`${r.confirmed} bevestigd`, r.undo); V.review();
@@ -263,7 +263,7 @@ async function renderGoals() {
     const eta = months ? new Date(Date.now() + months * 30.44 * 864e5).toLocaleDateString('nl-NL', { month: 'short', year: 'numeric' }) : null;
     return `<div class="card" style="box-shadow:none;background:var(--hover)" data-goal="${g.id}"><div class="row between"><b>${esc(g.icon)} ${esc(g.name)}</b><button class="btn sm ghost" data-edit title="Wijzigen">⋯</button></div>
       <div class="kpi"><div class="v" style="font-size:20px">${eur0(g.saved)}</div><div class="sub">van ${eur0(g.target)} · ${pct(g.saved, g.target)}%</div></div>
-      <div style="margin:8px 0">${progressBar(g.saved, g.target).replace('var(--good)', 'var(--accent)')}</div>
+      <div style="margin:8px 0">${progressBar(g.saved, g.target)}</div>
       <div class="small muted">${left === 0 ? '🎉 Doel bereikt!' : eta ? `Nog ${eur0(left)} · bij ${eur0(g.monthly)}/mnd klaar in ${eta}` : `Nog ${eur0(left)}`}</div>
       ${left > 0 ? `<button class="btn sm" style="margin-top:8px" data-add>+ Bijstorten</button>` : ''}</div>`; }).join('')}</div>` : '<div class="empty">Spaar je ergens voor? Stel een doel in en volg je voortgang.</div>'}</div>`;
   $('#addgoal').onclick = e => { e.preventDefault(); goalModal(); };

@@ -8,14 +8,15 @@ const TITLES = Object.fromEntries([...TABS, ['import', 'Importeren'], ['settings
 const NOMONTH = ['categories', 'import', 'settings', 'recurring', 'review', 'actual', 'year'];
 
 function updateNav() {
-  $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" ${S.tab === k ? 'aria-current="page"' : ''} data-tab="${k}">${icon(k)}<span>${l}</span>${k === 'review' && S.review ? `<span class="badge">${S.review}</span>` : ''}</button>`).join('')
+  $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" ${S.tab === k ? 'aria-current="page"' : ''} data-tab="${k}">${icon(k)}<span class="l-full">${l}</span><span class="l-short">${SHORT[k] || l}</span>${k === 'review' && S.review ? `<span class="badge">${S.review}</span>` : ''}</button>`).join('')
     + `<div class="nav-sep"></div>` + [['import', 'Importeren'], ['settings', 'Instellingen']].map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" data-tab="${k}">${icon(k)}<span>${l}</span></button>`).join('');
   // Telefoon: vier hoofdschermen + Meer (de rest staat in een sheet)
   const inMore = !PRIMARY.includes(S.tab);
   $('#tabbar').innerHTML = PRIMARY.map(k => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}" ${S.tab === k ? 'aria-current="page"' : ''}>${icon(k)}<span>${SHORT[k] || TITLES[k]}</span>${k === 'review' && S.review ? `<span class="badge">${S.review > 999 ? '999+' : S.review}</span>` : ''}</button>`).join('')
     + `<button data-more class="${inMore ? 'on' : ''}" aria-haspopup="dialog">${icon('more')}<span>Meer</span></button>`;
   const bal = S.accounts.filter(a => a.balance != null).reduce((a, b) => a + b.balance, 0);
-  $('#sidefoot').innerHTML = S.accounts.some(a => a.balance != null) ? `Totaalsaldo<b>${eur(bal)}</b>` : '<span class="faint">Lokaal &amp; privé</span>';
+  $('#sidefoot').innerHTML = (S.accounts.some(a => a.balance != null) ? `Totaalsaldo<b>${eur(bal)}</b>` : '<span class="faint">Lokaal &amp; privé</span>')
+    + (S.version ? `<div class="faint" style="margin-top:6px;font-size:11px">MyBudgets ${esc(S.version)}</div>` : '');
 }
 const PRIMARY = ['dashboard', 'review', 'transactions', 'budget'];
 const SHORT = { review: 'Beoordelen', categories: 'Categorieën' };
@@ -29,13 +30,15 @@ function openMore() {
   const bal = S.accounts.filter(a => a.balance != null).reduce((a, b) => a + b.balance, 0);
   const m = modal(`<div class="more-grid">${items.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${icon(k)}<span>${SHORT[k] || l}</span></button>`).join('')}
       <button data-search>${icon('search')}<span>Zoeken</span></button></div>
-    ${S.accounts.some(a => a.balance != null) ? `<div class="more-bal"><span class="muted">Totaalsaldo</span><b>${eur(bal)}</b></div>` : ''}`);
+    ${S.accounts.some(a => a.balance != null) ? `<div class="more-bal"><span class="muted">Totaalsaldo</span><b>${eur(bal)}</b></div>` : ''}
+    ${S.version ? `<div class="faint small" style="text-align:center;margin-top:10px">MyBudgets ${esc(S.version)}</div>` : ''}`);
   m.el.addEventListener('click', e => {
     const b = e.target.closest('[data-tab],[data-search]'); if (!b) return;
     m.close(); if (b.dataset.search !== undefined) openPalette(); else { S.txFilter = {}; go(b.dataset.tab); }
   });
 }
 async function refreshMeta() {
+  if (!S.version) S.version = (await GET('/version').catch(() => ({}))).version;
   S.cats = await GET('/categories');
   const [accs, rev] = await Promise.all([GET('/accounts'), GET('/review')]);
   S.accounts = accs; S.review = rev.reduce((a, g) => a + g.count, 0); S.hasData = accs.some(a => a.count > 0);
