@@ -13,7 +13,7 @@ import { createApi, demoCSVFrom } from './service.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PUB = join(ROOT, 'renderer');
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 
 const sha = v => createHash('sha256').update(String(v)).digest();
 const MAX_BODY = 200 * 1024 * 1024;   // een Actual-export als base64 kan groot zijn

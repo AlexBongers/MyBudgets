@@ -111,6 +111,7 @@ HOST=0.0.0.0 PORT=3000 MYBUDGETS_PASSWORD='lang-wachtwoord' DB_PATH=/var/lib/myb
 - **Je bestaande gegevens meenemen:** maak op je Mac een back-up (Instellingen → Back-up maken), zet het bestand als `data/budget.db` op de server (server eerst stoppen) en start opnieuw.
 - Samen tegelijk werken kan; SQLite is hier ruim snel genoeg voor twee gebruikers. Verander je dezelfde transactie tegelijk, dan wint de laatste.
 - Zet de server niet rechtstreeks op internet. Wil je buitenshuis erbij: gebruik een VPN (WireGuard/Tailscale) of een reverse proxy met HTTPS (bij HTTP gaat het wachtwoord leesbaar over het netwerk).
+- **Op je telefoon:** open het adres in Safari/Chrome en kies *Zet op beginscherm*; de interface past zich aan (onderbalk, kaarten).
 - In de browser ontbreken de Mac-specifieke functies (menu, PDF-export via ⌘P, native bestandsdialogen); importeren (Rabobank-CSV, Actual-ZIP) werkt via bestanden kiezen of slepen. Gebruik Ctrl+P → "Opslaan als pdf" van de browser.
 
 ## Privacy en beveiliging

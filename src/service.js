@@ -13,10 +13,18 @@ import { MONTH_RE as monthRe, httpErr } from './util.js';
 
 export { httpErr };
 
+const PROTECTED_KEYS = ['transfer', 'cash', 'salary', 'other', 'other_income'];
+
 export function createApi(db, ctx = {}) {
   const R = createReports(db);
   const { q, one, latestMonth, budgetRows, accounts, recurring, dashboard, report, detail, listTransactions, review, yearOverview } = R;
   const run = (sql, ...p) => db.prepare(sql).run(...p);
+  const unusedCategories = () => q(`SELECT c.id, c.name, c.icon, c.grp, c.kind FROM categories c
+    WHERE COALESCE(c.key,'') NOT IN (${PROTECTED_KEYS.map(k => `'${k}'`).join(',')})
+      AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.category_id=c.id) AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.category_id=c.id)
+      AND NOT EXISTS (SELECT 1 FROM rules r WHERE r.category_id=c.id) AND NOT EXISTS (SELECT 1 FROM memory m WHERE m.category_id=c.id)
+      AND NOT EXISTS (SELECT 1 FROM budgets b WHERE b.category_id=c.id AND b.amount<>0)
+    ORDER BY c.kind, c.grp, c.name`);
   // Laatste 30 wijzigingen kunnen ongedaan worden gemaakt (in het geheugen, per sessie)
   const undoStack = new Map(); let undoSeq = 0;
   const withUndo = (ids, fn) => {
@@ -55,6 +63,13 @@ export function createApi(db, ctx = {}) {
       };
     },
     'GET /api/categories': () => q(`SELECT c.* FROM categories c ORDER BY CASE c.kind WHEN 'income' THEN 0 WHEN 'expense' THEN 1 ELSE 2 END, ${GRP_ORDER}, c.grp, c.name`),
+    // Ongebruikt = geen transacties, splitsingen, regels, geheugen of ingevuld budget. Categorieën die de categoriseermodule zelf nodig heeft blijven staan.
+    'GET /api/categories/unused': () => unusedCategories(),
+    'POST /api/categories/prune': () => {
+      const ids = unusedCategories().map(c => c.id);
+      withTx(db, () => { for (const id of ids) run('DELETE FROM categories WHERE id=?', id); });
+      return { ok: true, removed: ids.length };
+    },
     'POST /api/categories': b => {
       const c = validCategory(b, true);
       const r = run('INSERT INTO categories (name, kind, color, icon, grp) VALUES (?,?,?,?,?)', c.name, c.kind || 'expense', c.color || '#6b7280', c.icon || '🏷️', c.grp || 'Overig');

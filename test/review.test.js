@@ -101,3 +101,17 @@ test('jaaroverzicht: vergelijking met vorig jaar zodra dat vanaf januari data he
   assert.equal(y.prevComplete, true); assert.equal(y.to, '2026-02-10');
   assert.equal(y.totals.expenses, 30000); assert.equal(y.prevTotals.expenses, 20000);    // 2025 t/m 10 feb; de 500 in augustus telt niet mee
 });
+
+test('ongebruikte categorieën opruimen: alleen echt ongebruikte, systeemcategorieën blijven', async () => {
+  const { db, api } = demo();
+  const leeg = await api('POST', '/api/categories', { name: 'Leeg' }), metBudget = await api('POST', '/api/categories', { name: 'MetBudget' }), nulBudget = await api('POST', '/api/categories', { name: 'NulBudget' });
+  await api('PUT', '/api/budget', { category_id: metBudget.id, month: '2026-10', amount: 5000 }); await api('PUT', '/api/budget', { category_id: nulBudget.id, month: '2026-10', amount: 0 });
+  const un = await api('GET', '/api/categories/unused'), names = un.map(c => c.name);
+  assert.ok(names.includes('Leeg') && names.includes('NulBudget')); assert.ok(!names.includes('MetBudget') && !names.includes('Boodschappen'));
+  for (const k of ['transfer', 'cash', 'salary', 'other', 'other_income']) assert.ok(!un.some(c => db.prepare('SELECT key FROM categories WHERE id=?').get(c.id).key === k), k);
+  const before = db.prepare('SELECT COUNT(*) c FROM categories').get().c, r = await api('POST', '/api/categories/prune', {});
+  assert.equal(r.removed, un.length); assert.equal(db.prepare('SELECT COUNT(*) c FROM categories').get().c, before - un.length);
+  assert.deepEqual(await api('GET', '/api/categories/unused'), []);
+  assert.ok(db.prepare("SELECT 1 FROM categories WHERE name='MetBudget'").get());
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM transactions WHERE category_id IS NULL').get().c, 0 + db.prepare('SELECT COUNT(*) c FROM transactions WHERE category_id IS NULL').get().c);
+});
