@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.8.0
+- **Telefoon**: tabbalk onderin (Dashboard, Beoordelen, Transacties, Budget) met *Meer*-sheet voor de rest en het totaalsaldo; dialogen als sheet van onderen; filters inklapbaar; transacties, budget, vaste lasten, categorieën en regels als compacte kaarten.
+- **Foldables en tablets**: smalle navigatierail tussen 600 en 1100 px; indeling volgt de werkelijk beschikbare breedte (container queries). Uit- of dichtvouwen tekent het scherm opnieuw. Op apparaten met een fysieke vouw lopen kolommen om het scharnier heen (Viewport Segments).
+- **Grafieken** worden op hun echte breedte getekend: leesbare labels op elk scherm.
+- **Robuuster**: duidelijke melding met *Opnieuw proberen* als de server even weg is; lezen wordt één keer automatisch herhaald; verouderde antwoorden bij snel wisselen worden genegeerd; terugkeren naar de app na een minuut ververst de gegevens; geen gecachete oude bestanden na een update.
+- Touch: geen dubbeltik-zoom, directe tik-feedback, grotere tikdoelen, geen ongevraagd toetsenbord bij het openen van een dialoog.
+- `npm run e2e:mobile`: controleert 10 schermen op 7 schermformaten (telefoon, Fold-cover, Flip, uitgevouwen, Pixel Fold, liggend, desktop).
+
 ## 2.7.0
 - **Mobiele browser**: onderbalk als navigatie, één kolom, transacties als kaarten, bottom-sheet dialogen, toevoegen aan beginscherm (webapp-manifest).
 - **Ongebruikte categorieën opruimen** (Categorieën & regels): verwijdert categorieën zonder transacties, regels, geheugen of budget; systeemcategorieën blijven.

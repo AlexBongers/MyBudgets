@@ -11,7 +11,7 @@ V.categories = async () => {
 async function catTab() {
   const kinds = { income: 'Inkomen', expense: 'Uitgaven', transfer: 'Overboekingen (tellen niet mee)' };
   const groups = [...new Set(S.cats.map(c => c.grp))];
-  $('#tabbody').innerHTML = `<div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th></th><th>Naam</th><th>Groep</th><th>Soort</th><th>Kleur</th><th></th></tr></thead><tbody>
+  $('#tabbody').innerHTML = `<div class="card" style="padding:0"><div class="tablewrap"><table class="st cattable"><thead><tr><th></th><th>Naam</th><th>Groep</th><th>Soort</th><th>Kleur</th><th></th></tr></thead><tbody>
     ${S.cats.map(c => `<tr data-id="${c.id}"><td><input data-f="icon" value="${esc(c.icon)}" style="width:44px;text-align:center" maxlength="4"></td><td><input data-f="name" value="${esc(c.name)}" style="width:200px"></td>
       <td><input data-f="grp" list="grps" value="${esc(c.grp)}" style="width:150px"></td>
       <td><select data-f="kind">${Object.entries(kinds).map(([k, l]) => `<option value="${k}" ${c.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
@@ -53,8 +53,8 @@ async function rulesTab() {
   const suggHtml = sugg.length ? `<div class="card" style="margin-bottom:16px"><h2>Voorgestelde regels <span class="right muted">gebaseerd op je eigen keuzes</span></h2>
     <div class="stack">${sugg.map((s, i) => `<div class="row between"><span>“${esc(s.label)}” → ${s.icon} ${esc(s.category)} <span class="faint small">${s.n}× zo ingedeeld</span></span><button class="btn sm" data-mkrule="${i}">Regel maken</button></div>`).join('')}</div></div>` : '';
   $('#tabactions').innerHTML = `<button class="btn" id="recat">↻ Alles opnieuw categoriseren</button><button class="btn primary" id="newrule">Nieuwe regel…</button>`;
-  $('#tabbody').innerHTML = suggHtml + (rules.length ? `<div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th style="width:36px"></th><th>Voorwaarde</th><th>Categorie</th><th class="num">Prioriteit</th><th></th></tr></thead><tbody>
-    ${rules.map(r => `<tr data-id="${r.id}" style="${r.enabled ? '' : 'opacity:.5'}"><td><input type="checkbox" data-toggle ${r.enabled ? 'checked' : ''} title="Aan/uit"></td><td>${esc(r.description)}</td><td>${r.icon} ${esc(r.category)}</td><td class="num">${r.priority}</td>
+  $('#tabbody').innerHTML = suggHtml + (rules.length ? `<div class="card" style="padding:0"><div class="tablewrap"><table class="st"><thead><tr><th style="width:36px"></th><th>Voorwaarde</th><th>Categorie</th><th class="num">Prioriteit</th><th></th></tr></thead><tbody>
+    ${rules.map(r => `<tr data-id="${r.id}" style="${r.enabled ? '' : 'opacity:.5'}"><td><input type="checkbox" data-toggle ${r.enabled ? 'checked' : ''} title="Aan/uit"></td><td class="c1">${esc(r.description)}</td><td class="sm cf">→ ${r.icon} ${esc(r.category)}</td><td class="num sm" data-l="prioriteit">${r.priority}</td>
       <td class="num nowrap"><button class="btn sm" data-edit>Wijzig</button> <button class="btn sm danger" data-del>✕</button></td></tr>`).join('')}</tbody></table></div></div>
     <p class="muted small">Regels gaan vóór alles. Bij gelijke prioriteit wint de meest specifieke (langste) tekst. Handmatig bevestigde transacties blijven altijd zoals je ze hebt ingedeeld.</p>`
     : `<div class="card empty">Nog geen eigen regels.<br>Maak er een voor tegenpartijen die je zelf wilt sturen, bijvoorbeeld “Albert Heijn boven €100 → Overig”.</div>`);
@@ -99,8 +99,8 @@ function ruleModal(rule, prefill) {
 async function memoryTab() {
   const mem = await GET('/memory');
   $('#tabbody').innerHTML = mem.length ? `<p class="muted">Wat MyBudgets van jouw keuzes heeft geleerd. Elke keer dat je een transactie indeelt, onthoudt de app de tegenpartij. Corrigeer je een keuze, dan weegt de nieuwe categorie zwaarder.</p>
-    <div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th>Tegenpartij / IBAN</th><th>Categorie</th><th class="num">Keer gekozen</th><th></th></tr></thead><tbody>
-    ${mem.map(x => `<tr><td>${esc(x.label || x.key)} <span class="faint small">${x.key.startsWith('i:') ? 'IBAN' : ''}</span></td><td>${x.icon} ${esc(x.category)}</td><td class="num">${x.n}</td><td class="num"><button class="btn sm" data-forget="${esc(x.key)}">Vergeet</button></td></tr>`).join('')}</tbody></table></div></div>`
+    <div class="card" style="padding:0"><div class="tablewrap"><table class="st"><thead><tr><th>Tegenpartij / IBAN</th><th>Categorie</th><th class="num">Keer gekozen</th><th></th></tr></thead><tbody>
+    ${mem.map(x => `<tr><td class="c1">${esc(x.label || x.key)} <span class="faint small">${x.key.startsWith('i:') ? 'IBAN' : ''}</span></td><td class="sm">${x.icon} ${esc(x.category)}</td><td class="num sm">${x.n}×</td><td class="num"><button class="btn sm" data-forget="${esc(x.key)}">Vergeet</button></td></tr>`).join('')}</tbody></table></div></div>`
     : `<div class="card empty">Nog niets geleerd. Deel transacties in via “Te beoordelen” en het geheugen vult zich vanzelf.</div>`;
   $$('[data-forget]').forEach(b => b.onclick = guard(async () => { await DEL('/memory?key=' + encodeURIComponent(b.dataset.forget)); await refreshMeta(); V.categories(); }));
 }
@@ -177,18 +177,18 @@ V.settings = async () => {
   const theme = pref.get('theme') || 'system';
   const m = render(`<div class="grid g2">
     <div class="card"><h2>Weergave</h2><div class="row between"><span>Thema</span><div class="seg" id="theme">${[['system', 'Systeem'], ['light', 'Licht'], ['dark', 'Donker']].map(([v, l]) => `<button data-v="${v}" class="${theme === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
-      <p class="muted small" style="margin-bottom:0">Standaard volgt MyBudgets de instelling van macOS.</p></div>
+      <p class="muted small" style="margin-bottom:0">Standaard volgt MyBudgets de instelling van je ${window.native ? 'computer' : 'apparaat'}.</p></div>
     <div class="card"><h2>Rekeningen</h2>${accs.length ? accs.map(a => `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)" data-id="${a.id}"><div><input data-name value="${esc(a.name)}" style="width:190px"><div class="small muted" style="margin-top:3px">${esc(a.iban)} · ${a.count} transacties${a.from ? ` · ${fmtDate(a.from)} – ${fmtDate(a.to)}` : ''}</div></div><b>${a.balance != null ? eur(a.balance) : ''}</b></div>`).join('') : '<div class="empty">Nog geen rekeningen. Ze verschijnen na je eerste import.</div>'}</div>
     <div class="card"><h2>Gegevens</h2><div class="stack">
       <div class="row"><button class="btn" id="exp">Transacties exporteren (CSV)…</button></div>
       ${window.native ? `<div class="row"><button class="btn" id="bk">Back-up maken…</button><button class="btn" id="rs">Back-up herstellen…</button><button class="btn" id="rv">Toon in Finder</button></div>` : '<div class="row"><a class="btn" href="/api/backup" download>Back-up downloaden (.db)</a><button class="btn" id="rsweb">Back-up herstellen…</button></div>'}
-      <p class="muted small" style="margin:0">Je gegevens staan lokaal in één databasebestand. Maak regelmatig een back-up (bijv. naar iCloud Drive of Time Machine).</p><hr>
+      <p class="muted small" style="margin:0">${window.native ? 'Je gegevens staan lokaal in één databasebestand. Maak regelmatig een back-up (bijv. naar iCloud Drive of Time Machine).' : 'Je gegevens staan in één database op de server, die elke dag zelf een back-up maakt. Download af en toe een extra kopie.'}</p><hr>
       <div class="row"><button class="btn" id="demo">Voorbeelddata laden</button><button class="btn danger" id="wipe">Alles wissen…</button></div></div></div>
     ${backups.length ? `<div class="card" style="grid-column:1/-1"><h2>Automatische back-ups <span class="right"><a href="#" id="bkreveal">Toon map</a></span></h2>
       <p class="muted small" style="margin-top:-4px">MyBudgets maakt elke dag een back-up (laatste 14 dagen bewaard). Herstellen maakt eerst een veiligheidskopie van je huidige gegevens.</p>
-      <table><tbody>${backups.slice(0, 8).map(b => `<tr><td>${esc(b.name)}</td><td class="muted small">${new Date(b.mtime).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</td><td class="num muted small">${(b.size / 1048576).toFixed(1)} MB</td><td class="num"><button class="btn sm" data-restore-bk="${esc(b.name)}">Herstellen…</button></td></tr>`).join('')}</tbody></table></div>` : ''}
-    <div class="card" style="grid-column:1/-1"><h2>Importgeschiedenis</h2>${imports.length ? `<table><thead><tr><th>Bestand</th><th>Geïmporteerd op</th><th>Periode</th><th class="num">Transacties</th><th></th></tr></thead><tbody>
-      ${imports.map(i => `<tr><td>${esc(i.name || '(naamloos)')}</td><td class="muted small">${esc(i.created.slice(0, 16).replace('T', ' '))}</td><td class="muted small">${i.from_date ? fmtDate(i.from_date) + ' – ' + fmtDate(i.to_date) : ''}</td><td class="num">${i.n}</td><td class="num"><button class="btn sm danger" data-undo-import="${i.id}" data-n="${i.n}">Terugdraaien</button></td></tr>`).join('')}</tbody></table>
+      <table class="st"><tbody>${backups.slice(0, 8).map(b => `<tr><td class="c1">${esc(b.name)}</td><td class="muted small">${new Date(b.mtime).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' })}</td><td class="num muted small">${(b.size / 1048576).toFixed(1)} MB</td><td class="num"><button class="btn sm" data-restore-bk="${esc(b.name)}">Herstellen…</button></td></tr>`).join('')}</tbody></table></div>` : ''}
+    <div class="card" style="grid-column:1/-1"><h2>Importgeschiedenis</h2>${imports.length ? `<table class="st"><thead><tr><th>Bestand</th><th>Geïmporteerd op</th><th>Periode</th><th class="num">Transacties</th><th></th></tr></thead><tbody>
+      ${imports.map(i => `<tr><td class="c1">${esc(i.name || '(naamloos)')}</td><td class="muted small sm">${esc(i.created.slice(0, 16).replace('T', ' '))}</td><td class="muted small sm cf">${i.from_date ? fmtDate(i.from_date) + ' – ' + fmtDate(i.to_date) : ''}</td><td class="num sm" data-l="transacties">${i.n}</td><td class="num"><button class="btn sm danger" data-undo-import="${i.id}" data-n="${i.n}">Terugdraaien</button></td></tr>`).join('')}</tbody></table>
       <p class="muted small" style="margin-bottom:0">Terugdraaien verwijdert alle transacties van die import. Het geleerde geheugen blijft bewaard.</p>` : '<div class="empty">Nog geen imports.</div>'}</div></div>`);
   $('#bkreveal')?.addEventListener('click', e => { e.preventDefault(); window.native.backups.reveal(); });
   $$('[data-restore-bk]').forEach(b => b.addEventListener('click', guard(() => window.native.backups.restore(b.dataset.restoreBk))));

@@ -10,12 +10,30 @@ const NOMONTH = ['categories', 'import', 'settings', 'recurring', 'review', 'act
 function updateNav() {
   $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" ${S.tab === k ? 'aria-current="page"' : ''} data-tab="${k}">${icon(k)}<span>${l}</span>${k === 'review' && S.review ? `<span class="badge">${S.review}</span>` : ''}</button>`).join('')
     + `<div class="nav-sep"></div>` + [['import', 'Importeren'], ['settings', 'Instellingen']].map(([k, l]) => `<button class="nav-item ${S.tab === k ? 'active' : ''}" data-tab="${k}">${icon(k)}<span>${l}</span></button>`).join('');
+  // Telefoon: vier hoofdschermen + Meer (de rest staat in een sheet)
+  const inMore = !PRIMARY.includes(S.tab);
+  $('#tabbar').innerHTML = PRIMARY.map(k => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}" ${S.tab === k ? 'aria-current="page"' : ''}>${icon(k)}<span>${SHORT[k] || TITLES[k]}</span>${k === 'review' && S.review ? `<span class="badge">${S.review > 999 ? '999+' : S.review}</span>` : ''}</button>`).join('')
+    + `<button data-more class="${inMore ? 'on' : ''}" aria-haspopup="dialog">${icon('more')}<span>Meer</span></button>`;
   const bal = S.accounts.filter(a => a.balance != null).reduce((a, b) => a + b.balance, 0);
   $('#sidefoot').innerHTML = S.accounts.some(a => a.balance != null) ? `Totaalsaldo<b>${eur(bal)}</b>` : '<span class="faint">Lokaal &amp; privé</span>';
 }
+const PRIMARY = ['dashboard', 'review', 'transactions', 'budget'];
+const SHORT = { review: 'Beoordelen', categories: 'Categorieën' };
+function monthLabel(m) { $('#monthlabel').innerHTML = m ? `<span class="ml-l">${monthName(m)}</span><span class="ml-s">${monthShort(m)} ${m.slice(0, 4)}</span>` : ''; }
 function setMonth(m, months) {
   S.month = m; if (months) S.months = months;
-  $('#monthlabel').textContent = monthName(m);
+  monthLabel(m);
+}
+function openMore() {
+  const items = [...TABS.filter(([k]) => !PRIMARY.includes(k)), ['import', 'Importeren'], ['settings', 'Instellingen']];
+  const bal = S.accounts.filter(a => a.balance != null).reduce((a, b) => a + b.balance, 0);
+  const m = modal(`<div class="more-grid">${items.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${icon(k)}<span>${SHORT[k] || l}</span></button>`).join('')}
+      <button data-search>${icon('search')}<span>Zoeken</span></button></div>
+    ${S.accounts.some(a => a.balance != null) ? `<div class="more-bal"><span class="muted">Totaalsaldo</span><b>${eur(bal)}</b></div>` : ''}`);
+  m.el.addEventListener('click', e => {
+    const b = e.target.closest('[data-tab],[data-search]'); if (!b) return;
+    m.close(); if (b.dataset.search !== undefined) openPalette(); else { S.txFilter = {}; go(b.dataset.tab); }
+  });
 }
 async function refreshMeta() {
   S.cats = await GET('/categories');
@@ -28,12 +46,20 @@ async function go(tab) {
   if (tab === 'detail' && S.tab !== 'detail') S.backTab = S.tab;
   S.tab = tab;
   if (tab !== 'detail') pref.set('tab', tab);
-  if (S.month) { pref.set('month', S.month); $('#monthlabel').textContent = monthName(S.month); } document.title = 'MyBudgets';
+  NAV++;
+  if (S.month) { pref.set('month', S.month); monthLabel(S.month); } document.title = 'MyBudgets';
   $('#title').textContent = TITLES[tab];
   $('#monthpick').style.display = NOMONTH.includes(tab) ? 'none' : '';
   updateNav();
   $('#main').scrollTop = 0;
-  await guard(() => V[tab]())();
+  try { await V[tab](); }
+  catch (e) {
+    if (e?.stale) return;
+    console.error(e);
+    // Scherm kon niet laden (bijv. server even weg): duidelijke melding met opnieuw proberen i.p.v. een half scherm
+    render(`<div class="hero"><div class="big">⚠️</div><h2>Dit scherm kon niet worden geladen</h2><p>${esc(e.message || 'Er ging iets mis')}</p><button class="btn primary" id="retry">Opnieuw proberen</button></div>`);
+    $('#retry').onclick = () => go(tab);
+  }
   updateNav();
 }
 function stepMonth(delta) {
@@ -42,6 +68,20 @@ function stepMonth(delta) {
 }
 
 $('#nav').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { S.txFilter = {}; go(b.dataset.tab); } });
+$('#tabbar').addEventListener('click', e => {
+  if (e.target.closest('[data-more]')) return openMore();
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  if (b.dataset.tab === S.tab) { $('#main').scrollTo({ top: 0, behavior: 'smooth' }); return; }   // nogmaals tikken = naar boven
+  S.txFilter = {}; go(b.dataset.tab);
+});
+// Breedte verandert (uit-/dichtvouwen, draaien, venster): huidig scherm opnieuw tekenen zodat grafieken en indeling passen.
+// Alleen bij een echte breedteverandering, en niet terwijl je iets aan het invullen bent.
+let lastW = $('#main').clientWidth;
+new ResizeObserver(debounce(() => {
+  const w = $('#main').clientWidth; if (Math.abs(w - lastW) < 24) return; lastW = w;
+  if (document.querySelector('.overlay') || document.activeElement?.matches('input,textarea,select')) return;
+  const top = $('#main').scrollTop; NAV++; guard(async () => { await V[S.tab](); $('#main').scrollTop = top; })();
+}, 220)).observe($('#main'));
 $('#prev').onclick = () => stepMonth(-1);
 $('#next').onclick = () => stepMonth(1);
 $('#monthlabel').onclick = () => { S.month = S.months[0] || S.month; go(S.tab); };
@@ -90,6 +130,18 @@ window.addEventListener('drop', guard(async e => {
   importFiles(await Promise.all(files.map(async f => ({ name: f.name, base64: await readFileBase64(f) }))));
 }));
 
+// Terug naar de app na een tijdje weg (telefoon uit zak, ander tabblad): gegevens verversen, zodat je ziet wat de
+// ander intussen heeft gedaan. Niet als je midden in iets zit.
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  if (!hiddenAt || Date.now() - hiddenAt < 60000 || window.native) return;
+  if (document.querySelector('.overlay') || document.activeElement?.matches('input,textarea,select')) return;
+  const top = $('#main').scrollTop;
+  guard(async () => { await refreshMeta(); NAV++; await V[S.tab](); $('#main').scrollTop = top; })();
+});
+const isMacLike = window.native ? window.native.platform === 'darwin' : /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+if (!isMacLike) $('#palettebtn kbd').textContent = 'Ctrl K';
 guard(async () => {
   applyTheme(pref.get('theme'));
   await refreshMeta();

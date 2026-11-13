@@ -17,7 +17,7 @@
 <body>
 <div id="app">
   <aside class="sidebar">
-    <div class="side-top drag"></div>
+    <div class="side-top drag"><div class="brand"><img src="icon-192.png" alt=""><span>MyBudgets</span></div></div>
     <nav id="nav"></nav>
     <div class="side-foot" id="sidefoot"></div>
   </aside>
@@ -30,11 +30,12 @@
         <button class="monthlabel" id="monthlabel" title="Naar laatste maand met data"></button>
         <button class="icon-btn" id="next" aria-label="Volgende maand" title="Volgende maand (⌘])">›</button>
       </div>
-      <button class="btn nodrag" id="palettebtn" title="Zoeken en navigeren (⌘K)">🔍 <kbd>⌘K</kbd></button>
+      <button class="btn nodrag" id="palettebtn" title="Zoeken en navigeren" aria-label="Zoeken en navigeren"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><kbd>⌘K</kbd></button>
       <button class="btn primary nodrag" id="importbtn">Importeren</button>
     </header>
     <main id="main"></main>
   </section>
+  <nav class="tabbar" id="tabbar" aria-label="Hoofdnavigatie"></nav>
 </div>
 <div id="modal-root"></div>
 <div id="toast" role="status"></div>
