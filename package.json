@@ -1,7 +1,7 @@
 {
   "name": "mybudgets",
   "productName": "MyBudgets",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Persoonlijke budget-app voor macOS en Windows: Rabobank-import, slimme categorisering, budgetten en inzichten. Alles lokaal.",
   "author": "MyBudgets",
   "license": "UNLICENSED",
@@ -16,7 +16,8 @@
     "bench": "node --no-warnings scripts/bench.js",
     "dist": "electron-builder --mac --publish never",
     "pack": "electron-builder --dir",
-    "dist:win": "electron-builder --win --x64 --publish never"
+    "dist:win": "electron-builder --win --x64 --publish never",
+    "e2e:mobile": "node scripts/e2e-mobile.cjs"
   },
   "engines": {
     "node": ">=22.13"

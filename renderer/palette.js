@@ -17,7 +17,7 @@ function openPalette() {
     ...S.cats.map(c => ({ g: 'Categorieën', icon: c.icon, label: c.name, hint: c.grp, run: () => openCategory(c.id) })),
   ];
   const m = modal(`<input id="pq" placeholder="Zoek een scherm, categorie, tegenpartij of transactie…" style="width:100%;font-size:15px;padding:9px 12px"><div id="pres" style="margin-top:10px;max-height:52vh;overflow:auto"></div>`);
-  m.el.firstElementChild.style.cssText = 'width:min(640px,92vw);padding:14px;margin-top:14vh';
+  m.el.firstElementChild.style.cssText = matchMedia('(max-width:599px)').matches ? 'padding:12px 12px 14px;border-radius:0 0 18px 18px;max-height:80dvh' : 'width:min(640px,92vw);padding:14px;margin-top:14vh';
   m.el.style.alignItems = 'start';
   const input = m.$('#pq'), res = m.$('#pres');
   let items = [], sel = 0, remote = { merchants: [], transactions: [] };

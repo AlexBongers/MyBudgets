@@ -66,7 +66,7 @@ input[type=checkbox]{accent-color:var(--accent)}
 /* cards */
 .grid{display:grid;gap:16px}
 .g4{grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}.g21{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
-@media (max-width:1180px){.g21{grid-template-columns:1fr}}
+@container main (max-width:880px){.g21{grid-template-columns:minmax(0,1fr)}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
 .card h2{font-size:12px;margin:0 0 12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:8px}
 .card h2 .right{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400}
@@ -151,7 +151,8 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
   :root:root:root{--bg:#fff;--card:#fff;--text:#1d1d1f;--muted:#6e6e73;--faint:#a1a1a6;--line:rgba(0,0,0,.12);--hover:rgba(0,0,0,.04);--accent:#007aff;--accent-soft:rgba(0,122,255,.12);--good:#248a3d;--bad:#d70015;--warn:#c93400;--shadow:none;color-scheme:light}
   html,body{height:auto;overflow:visible;background:#fff}
   #app{display:block;height:auto}
-  .sidebar,#palettebtn,#importbtn,#prev,#next,.banner,.bulkbar,#toast,.filters,#modal-root{display:none!important}
+  .sidebar,.tabbar,#palettebtn,#importbtn,#prev,#next,.banner,.bulkbar,#toast,.filters,#modal-root{display:none!important}
+  .content{padding:0!important}
   .content{display:block}
   main{overflow:visible;padding:0}
   .toolbar{position:static;height:auto;border:0;padding:0 0 14px}
@@ -167,56 +168,200 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:none}
 .page{animation:rise .22s ease-out}
 @keyframes rise{from{opacity:0;transform:translateY(6px)}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
-/* mobiel: onderbalk als navigatie, één kolom, grotere tikdoelen */
-@media (max-width:760px){
-  html,body{overflow:hidden}
-  #app{flex-direction:column-reverse;height:100vh;height:100dvh}
-  .sidebar{width:auto;flex:none;flex-direction:row;padding:0 2px env(safe-area-inset-bottom);border-right:0;border-top:1px solid var(--line);background:var(--side)}
-  .side-top,.side-foot,.nav-sep,.nav-label{display:none}
-  #nav{flex-direction:row;overflow-x:auto;gap:0;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-  #nav::-webkit-scrollbar{display:none}
-  .nav-item{flex:0 0 auto;flex-direction:column;gap:2px;width:auto;min-width:66px;padding:7px 8px 6px;font-size:10.5px;justify-content:center;position:relative;border-radius:8px}
-  .nav-item.active{background:var(--accent-soft);color:var(--accent)}
-  .nav-item svg{width:21px;height:21px}
-  .nav-item .badge{position:absolute;top:1px;right:10px;margin:0;line-height:15px;min-width:16px;font-size:10px;padding:0 4px}
-  .nav-item.active .badge{background:var(--bad);color:#fff}
-  .toolbar{height:auto;min-height:48px;flex-wrap:wrap;gap:6px 8px;padding:6px 12px;padding-top:max(6px,env(safe-area-inset-top))}
-  .toolbar h1{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  #palettebtn kbd,#importbtn{display:none}
-  .monthlabel{min-width:96px}
-  main{padding:12px 12px 28px;-webkit-overflow-scrolling:touch}
-  .card{padding:14px;overflow-x:auto}
-  .grid{gap:12px}.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g2,.g21{grid-template-columns:minmax(0,1fr)}
-  .kpi .v{font-size:21px}
-  .btn{min-height:36px;padding:6px 14px}.btn.sm{min-height:32px}
-  input,select,textarea{font-size:16px}                       /* voorkomt inzoomen op iOS */
-  input[type=text],input[type=search],input[type=number],input:not([type]),select,textarea{padding:7px 10px}
-  input[style*="width"],select[style*="width"]{max-width:100%}
-  .filters input[type=search],.filters select{width:100%;flex:1 1 140px}
-  .seg{flex-wrap:wrap}.seg button{padding:6px 12px}
-  .form{grid-template-columns:1fr}
-  .rv{grid-template-columns:minmax(0,1fr)}.rv-actions{justify-content:flex-start}
-  .legend{min-width:0;flex-basis:100%}
-  .card .row[style*="nowrap"]{flex-wrap:wrap!important}
-  .hero{margin-top:3vh}.hero .big{font-size:44px}.dz{padding:22px}
-  .overlay{place-items:end stretch}
-  .modal{width:100%;max-height:92vh;max-height:92dvh;border-radius:16px 16px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
-  #toast{bottom:calc(76px + env(safe-area-inset-bottom));max-width:92vw}
-  .bulkbar{flex-wrap:wrap;bottom:6px}
-  td.sub{max-width:180px}
-  th,td{padding:8px 8px}
+
+/* ================= Responsief =================
+   Shell (navigatie) via media queries op de viewport:
+     ≥ 1100px  zijbalk · 600–1099px  rail (uitgevouwen foldable, tablet, liggende telefoon) · < 600px  tabbalk onderin
+   Inhoud via container queries op #main, zodat kaarten zich aanpassen aan de werkelijke ruimte (ook naast rail of scharnier). */
+#main{container:main/inline-size}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+a.btn{color:inherit;text-decoration:none;display:inline-flex;align-items:center}
+.brand{display:flex;align-items:center;gap:9px;padding:14px 10px 6px;font-weight:700;font-size:15px;letter-spacing:-.01em}
+.brand img{width:26px;height:26px;border-radius:7px}
+body.mac .brand{display:none}
+body:not(.mac) .side-top{height:auto}
+.chart{width:100%;min-height:40px}.chart svg{display:block}
+.ml-s{display:none}
+.tabbar{display:none}
+.filters-toggle{display:none}
+.fx{display:contents}
+.icon-btn svg,.btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-3px}
+#palettebtn{display:inline-flex;align-items:center;gap:6px}
+#app{height:100vh;height:100dvh}
+
+/* --- rail --- */
+@media (max-width:1099px) and (min-width:600px){
+  .sidebar{width:84px;padding:0 6px 10px}
+  .brand span,.side-foot{display:none}.brand{justify-content:center;padding:14px 0 8px}
+  .nav-item{flex-direction:column;gap:3px;padding:8px 2px 7px;font-size:10.5px;line-height:1.15;text-align:center;justify-content:center;position:relative}
+  .nav-item span:not(.badge){max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nav-item svg{width:20px;height:20px}
+  .nav-item .badge{position:absolute;top:3px;right:12px;margin:0;font-size:10px;line-height:15px;min-width:16px;padding:0 4px}
+  .nav-item.active{background:var(--accent-soft);color:var(--accent)}.nav-item.active .badge{background:var(--bad);color:#fff}
+  .toolbar{padding:0 16px}
+  #importbtn{display:none}
 }
-@media (max-width:380px){.g4{grid-template-columns:minmax(0,1fr)}}
-@media (max-width:760px){
-  /* transactielijst: elke rij wordt een compacte kaart (datum · naam · bedrag, daaronder de categorie) */
-  .txtable thead{display:none}
-  .txtable,.txtable tbody{display:block}
-  .txtable tr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"sel name amt" "sel date date" ". cat cat";gap:2px 10px;padding:10px 12px;border-bottom:1px solid var(--line)}
-  .txtable td{display:block;padding:0;border:0;min-width:0}
-  .txtable td:nth-child(1){grid-area:sel;align-self:center}.txtable td:nth-child(1) input{width:20px;height:20px}
+@media (max-width:1099px) and (min-width:600px) and (max-height:540px){
+  .nav-item span:not(.badge){display:none}.nav-item{padding:9px 2px}.brand{display:none}body:not(.mac) .side-top{height:8px}
+}
+
+/* --- telefoon --- */
+@media (max-width:599px){
+  body{font-size:14px}
+  .sidebar{display:none}
+  .content{padding-bottom:calc(58px + env(safe-area-inset-bottom))}
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:40;padding:4px 4px env(safe-area-inset-bottom);
+    background:color-mix(in srgb,var(--side) 92%,transparent);backdrop-filter:saturate(1.6) blur(18px);-webkit-backdrop-filter:saturate(1.6) blur(18px);border-top:1px solid var(--line)}
+  .tabbar button{border:0;background:none;color:var(--muted);font:inherit;font-size:10.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0 5px;position:relative;border-radius:10px;min-width:0}
+  .tabbar button span:not(.badge){max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tabbar svg{width:23px;height:23px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .tabbar .on{color:var(--accent)}
+  .tabbar .badge{position:absolute;top:1px;left:calc(50% + 6px);margin:0;font-size:10px;line-height:16px;min-width:17px;padding:0 4px}
+  .toolbar{height:auto;min-height:50px;padding:6px 12px;padding-top:max(6px,env(safe-area-inset-top));gap:8px}
+  .toolbar h1{font-size:18px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+  .toolbar .spacer{display:none}
+  #importbtn,#palettebtn kbd{display:none}
+  #palettebtn{width:36px;height:34px;padding:0;justify-content:center}
+  .monthlabel{min-width:0;padding:4px 4px}.ml-l{display:none}.ml-s{display:inline}
+  .icon-btn{width:30px;height:30px}
+  main{padding:12px 12px 24px}
+  #toast{bottom:calc(70px + env(safe-area-inset-bottom));max-width:calc(100vw - 24px)}
+  .overlay{place-items:end stretch}
+  .modal{width:100%!important;max-height:90vh;max-height:90dvh;border-radius:18px 18px 0 0;padding:10px 16px calc(16px + env(safe-area-inset-bottom));animation:sheet .22s cubic-bezier(.2,.8,.2,1)}
+  .modal::before{content:"";display:block;width:38px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
+  .modal .foot{position:sticky;bottom:-16px;background:var(--card);padding:10px 0 4px;margin-bottom:-4px}
+  .modal .foot{flex-wrap:wrap}.modal .foot .btn{flex:1 1 auto;justify-content:center;min-width:calc(50% - 4px)}
+}
+@keyframes sheet{from{transform:translateY(40px);opacity:.4}}
+
+/* Meer-sheet */
+.more-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.more-grid button{border:1px solid var(--line);background:var(--bg);border-radius:14px;padding:14px 6px 12px;display:flex;flex-direction:column;align-items:center;gap:7px;font:inherit;font-size:12.5px;color:var(--text);text-align:center;line-height:1.2}
+.more-grid button.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.more-grid svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.more-bal{display:flex;justify-content:space-between;align-items:baseline;padding:12px 4px 2px;margin-top:12px;border-top:1px solid var(--line)}
+.more-bal b{font-size:18px;font-variant-numeric:tabular-nums}
+
+/* --- touch: geen hover-resten, snelle tik-feedback, geen dubbeltik-zoom --- */
+button,a,select,input,label,.li,[data-month],[data-cat],[data-payee],[data-tx],tr[data-m]{touch-action:manipulation}
+*{-webkit-tap-highlight-color:transparent}
+@media (hover:none){
+  .btn:hover,.nav-item:hover,tbody tr:hover,.legend .li:hover,.monthlabel:hover,.icon-btn:hover{background:inherit}
+  .btn:hover{background:var(--card)}.btn.primary:hover{background:var(--accent);filter:none}.btn.ghost:hover{background:none}
+  .btn:active,.nav-item:active,.tabbar button:active,.more-grid button:active,.legend .li:active,tbody tr:active,.icon-btn:active{opacity:.6;transition:opacity 0s}
+  .kbd-hint,#palettebtn kbd{display:none!important}
+}
+@media (pointer:coarse){.kbd-hint,#palettebtn kbd{display:none!important}}
+@media (pointer:coarse){
+  .btn{min-height:38px;padding:6px 14px}.btn.sm{min-height:34px;padding:4px 11px}
+  input,select,textarea{font-size:16px}                       /* voorkomt inzoomen in iOS */
+  input[type=text],input[type=search],input[type=number],input[type=date],input:not([type]),select,textarea{min-height:38px;padding:6px 10px}
+  input[type=checkbox]{width:20px;height:20px}
+  .seg button{padding:7px 12px}
+  .legend .li{padding:7px 6px}
+  td,th{padding-top:10px;padding-bottom:10px}
+}
+
+/* --- inhoud: compact (smaller dan 640px beschikbaar) --- */
+@container main (max-width:640px){
+  .page>.grid,.page .grid{gap:10px}
+  .page>.grid[style*="margin-bottom:16px"],.grid[style*="margin-bottom:16px"]{margin-bottom:10px!important}
+  .g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g2,.g21{grid-template-columns:minmax(0,1fr)}
+  .card{padding:14px;border-radius:14px}
+  .card h2{font-size:11.5px;flex-wrap:wrap;row-gap:2px}
+  .kpi .v{font-size:20px}.kpi h2{margin-bottom:6px}
+  .banner{flex-wrap:wrap;gap:8px 10px;padding:10px 12px}
+  .empty{padding:22px 12px}
+  .hero{margin-top:2vh}.hero .big{font-size:44px}.hero h2{font-size:21px}.dz{padding:24px 14px}
+  .form{grid-template-columns:1fr;gap:4px 0}.form label{margin-top:8px}
+  .filters{gap:8px}
+  .filters input[type=search]{width:auto;flex:1 1 160px}
+  .filters-toggle{display:inline-flex}
+  .filters:not(.open) .fx{display:none}
+  .filters .fx select,.filters .fx .seg{flex:1 1 auto}
+  .rv{grid-template-columns:minmax(0,1fr);gap:10px}
+  .rv .sample{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .rv-actions{display:grid;grid-template-columns:minmax(0,1fr) auto auto;justify-content:stretch;gap:8px}
+  .rv-actions [data-accept]{grid-column:1/-1;justify-content:center;display:flex;align-items:center;gap:4px}
+  .rv-actions select{width:100%}
+  .legend{min-width:0;flex-basis:100%}
+  .donut-row{flex-wrap:wrap!important;justify-content:center}
+  .bulkbar{flex-wrap:wrap;bottom:8px}.bulkbar select{flex:1 1 140px}
+  .heat td:first-child,.heat th:first-child{position:sticky;left:0;z-index:2;background:var(--card);box-shadow:1px 0 0 var(--line);max-width:44vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .heat tr.group td:first-child{background:color-mix(in srgb,var(--text) 4%,var(--card))}
+  .hide-c{display:none}
+  .seg{max-width:100%;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}.seg::-webkit-scrollbar{display:none}.seg button{white-space:nowrap;flex:none}
+  .card td svg[aria-hidden]{max-width:76px;height:auto}
+  .card table td{overflow-wrap:anywhere}
+  .row.between{row-gap:10px}
+
+  /* tabellen die op smalle breedte kaarten worden */
+  table.st thead{display:none}
+  table.st,table.st tbody{display:block}
+  table.st tr{display:flex;flex-wrap:wrap;align-items:center;gap:3px 10px;padding:11px 14px;border-bottom:1px solid var(--line)}
+  table.st tr:last-child{border-bottom:0}
+  table.st td{display:block;padding:0;border:0;min-width:0}
+  table.st td.c1{flex:1 1 0;font-weight:550}
+  table.st td.cf{flex-basis:100%}
+  table.st td.num{margin-left:auto}
+  table.st td.sm{font-size:12.5px;color:var(--muted)}
+  table.st td[data-l]::before{content:attr(data-l) " ";color:var(--faint)}
+  table.st tr.grp{display:block;padding:0}table.st tr.grp td{display:block;padding:7px 14px}
+
+  /* transacties */
+  table.st.txtable tr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"sel name amt" "sel date date" ". cat cat";gap:1px 12px;padding:11px 14px}
+  .txtable td:nth-child(1){grid-area:sel;align-self:center}
   .txtable td:nth-child(2){grid-area:date;font-size:12px;color:var(--muted)}
   .txtable td:nth-child(3){grid-area:name}.txtable td:nth-child(3) .ellipsis{max-width:100%!important}
-  .txtable td:nth-child(5){grid-area:amt;align-self:start}
-  .txtable td:nth-child(4){grid-area:cat;margin-top:6px}.txtable td:nth-child(4) .row{flex-wrap:nowrap}.txtable td:nth-child(4) select{flex:1;min-width:0;width:100%;max-width:none}
-  .txtable .cat-input{width:100%}
+  .txtable td:nth-child(5){grid-area:amt;align-self:start;margin:0}
+  .txtable td:nth-child(4){grid-area:cat;margin-top:7px}.txtable td:nth-child(4) .row{flex-wrap:nowrap}
+  .txtable td:nth-child(4) select{flex:1;min-width:0;width:100%;max-width:none}
+
+  /* budget: naam + invoer, voortgang, cijfers */
+  table.st.budtable tr:not(.grp){display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;grid-template-areas:"name name name inp" "bar bar bar bar" "avg spent . left";gap:6px 14px}
+  .budtable td:nth-child(1){grid-area:name;align-self:center}
+  .budtable td:nth-child(2){grid-area:bar}
+  .budtable td:nth-child(3){grid-area:inp;margin:0}
+  .budtable td:nth-child(3) input{width:100px!important}
+  .budtable td:nth-child(4){grid-area:avg}.budtable td:nth-child(5){grid-area:spent}.budtable td:nth-child(6){grid-area:left}
+  .budtable td:nth-child(n+4){margin:0;font-size:12.5px;text-align:left}
+
+  /* vaste lasten */
+  table.st.rectable tr{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"nm amt x" "cat cat cat" "frq nxt nxt";gap:5px 10px}
+  .rectable td:nth-child(1){grid-area:nm;align-self:center}.rectable td:nth-child(2){grid-area:cat}.rectable td:nth-child(3){grid-area:frq;font-size:12.5px;color:var(--muted)}
+  .rectable td:nth-child(4){grid-area:amt;align-self:center;font-weight:600;margin:0}.rectable td:nth-child(5),.rectable td:nth-child(6){display:none}
+  .rectable td:nth-child(7){grid-area:nxt;text-align:right}.rectable td:nth-child(8){grid-area:x;margin:0}
+
+  /* categorieën: icoon + naam + verwijderen, daaronder groep/soort/kleur */
+  table.st.cattable tr{display:grid;grid-template-columns:52px minmax(0,1fr) auto;grid-template-areas:"ic nm del" "gr gr gr" "kd kd col";gap:8px}
+  .cattable td:nth-child(1){grid-area:ic}.cattable td:nth-child(1) input{width:52px!important}
+  .cattable td:nth-child(2){grid-area:nm}.cattable td:nth-child(2) input{width:100%!important}
+  .cattable td:nth-child(3){grid-area:gr}.cattable td:nth-child(3) input{width:100%!important}
+  .cattable td:nth-child(4){grid-area:kd}.cattable td:nth-child(4) select{width:100%}
+  .cattable td:nth-child(5){grid-area:col;align-self:center}.cattable td:nth-child(5) input{width:44px;height:36px}
+  .cattable td:nth-child(6){grid-area:del;align-self:center}
+}
+@container main (max-width:380px){
+  .g4{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .kpi .v{font-size:17.5px}.card.kpi{padding:12px}
+  .more-grid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* --- foldables met scharnier (Viewport Segments API): kolommen links en rechts van de vouw --- */
+@media (horizontal-viewport-segments:2){
+  .g2,.g21{grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:calc(env(viewport-segment-left 1 0, 0px) - env(viewport-segment-right 0 0, 0px) + 20px)}
+  .overlay{place-items:center end}
+  .modal{width:calc(env(viewport-segment-width 1 0, 50vw) - 32px)!important;margin-right:16px}
+}
+@media (vertical-viewport-segments:2){
+  .overlay{place-items:end stretch}
+  .modal{max-height:calc(env(viewport-segment-height 0 1, 50vh) - 8px)}
+}
+/* middenbreedte (uitgevouwen foldable, tablet): tabellen compacter zodat bedragen niet buiten beeld vallen */
+@container main (min-width:641px) and (max-width:920px){
+  th,td{padding-left:7px;padding-right:7px}
+  .txtable td:nth-child(4) .tag{display:none}
+  .txtable .cat-input{width:170px}
+  .txtable td:nth-child(3) .ellipsis{max-width:200px!important}
+  .budtable th:nth-child(2),.budtable td:nth-child(2){width:16%}
 }

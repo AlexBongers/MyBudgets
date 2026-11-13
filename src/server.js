@@ -25,7 +25,8 @@ export function createServer(db, extraCtx = {}, opts = {}) {
   const wantHash = opts.password ? sha(opts.password) : null;
   const api = createApi(db, { demoCSV: demoCSVFrom(join(ROOT, "samples/rabobank-demo.csv")), ...extraCtx });
   return http.createServer(async (req, res) => {
-    const send = (code, body, type = 'application/json') => { res.writeHead(code, { 'Content-Type': type }); res.end(Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body)); };
+    // API-antwoorden nooit cachen; statische bestanden altijd hervalideren, zodat een update op de server meteen overal geldt
+    const send = (code, body, type = 'application/json') => { res.writeHead(code, { 'Content-Type': type, 'Cache-Control': type === 'application/json' ? 'no-store' : 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }); res.end(Buffer.isBuffer(body) || typeof body === 'string' ? body : JSON.stringify(body)); };
     try {
       const u = new URL(req.url, 'http://localhost');
       if (u.pathname === '/healthz') return send(200, { ok: true });

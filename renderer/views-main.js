@@ -4,7 +4,7 @@ const SRC = { split: 'gesplitst', pair: 'overboeking', rule: 'regel', own: 'eige
 
 function emptyHero() {
   return `<div class="hero"><div class="big">🌷</div><h2>Welkom bij MyBudgets</h2>
-    <p>Importeer je Rabobank-transacties en krijg direct inzicht. Alles blijft lokaal op je Mac.</p>
+    <p>Importeer je Rabobank-transacties en krijg direct inzicht. ${window.native ? 'Alles blijft lokaal op je computer.' : 'Alles blijft op je eigen server.'}</p>
     <div class="row" style="justify-content:center;margin-bottom:26px"><button class="btn primary" data-act="import">Rabobank CSV kiezen…</button><button class="btn" data-act="demo">Probeer met voorbeelddata</button></div>
     <div class="card" style="text-align:left"><h2>Zo exporteer je uit Rabo Internetbankieren</h2>
       <ol class="steps"><li>Log in en open je <b>betaalrekening</b> → <b>Transacties</b>.</li><li>Kies <b>Downloaden</b> en selecteer de periode (bijv. het hele laatste jaar).</li>
@@ -33,7 +33,7 @@ V.dashboard = async () => {
     </div>
     <div class="grid g2" style="margin-bottom:16px">
       <div class="card"><h2>Laatste 12 maanden <span class="right"><span class="dot" style="background:var(--good)"></span> inkomsten &nbsp;<span class="dot" style="background:var(--bad)"></span> uitgaven</span></h2>${barChart(d.trend, d.month)}</div>
-      <div class="card"><h2>Uitgaven per categorie</h2><div class="row" style="gap:16px;align-items:flex-start;flex-wrap:nowrap" id="catdonut">${donut(d.byCategory)}
+      <div class="card"><h2>Uitgaven per categorie</h2><div class="row donut-row" style="gap:16px;align-items:flex-start;flex-wrap:nowrap" id="catdonut">${donut(d.byCategory)}
         <div class="legend">${d.byCategory.slice(0, 9).map(c => `<div class="li" data-cat="${c.id ?? ''}"><span><i class="dot" style="background:${c.color}"></i> ${c.icon} ${esc(c.name)}</span><span class="nowrap"><b>${eur0(c.value)}</b> ${c.prev && Math.abs(c.value - c.prev) > c.prev * 0.05 ? deltaChip(c.value, c.prev, true) : ''}</span></div>`).join('')}</div></div></div>
     </div>
     <div class="grid g2">
@@ -64,9 +64,9 @@ V.review = async () => {
   if (!groups.length) { render(`<div class="hero"><div class="big">✅</div><h2>Alles is ingedeeld</h2><p>Geen transacties die je aandacht nodig hebben. Nieuwe imports worden automatisch gecategoriseerd; wat de module niet zeker weet, verschijnt hier.</p><button class="btn primary" data-go="dashboard">Naar dashboard</button></div>`).querySelector('[data-go]').onclick = () => go('dashboard'); return; }
   const withSug = groups.filter(g => g.suggestions.length);
   const m = render(`
-    <div class="row between" style="margin-bottom:14px"><div><b>${groups.length}</b> tegenpartijen · <b>${S.review}</b> transacties <span class="muted">— deel in per tegenpartij; MyBudgets leert van je keuzes.</span></div>
+    <div class="row between" style="margin-bottom:14px"><div><b>${groups.length}</b> tegenpartijen · <b>${S.review}</b> transacties <span class="muted hide-c">— deel in per tegenpartij; MyBudgets leert van je keuzes.</span></div>
       ${withSug.length ? `<button class="btn" id="acceptall">✓ Bevestig alle suggesties (${withSug.reduce((a, g) => a + g.count, 0)})</button>` : ''}</div>
-    <div class="muted small" style="margin:-4px 0 12px">⌨️ <kbd>j</kbd>/<kbd>k</kbd> bladeren · <kbd>Enter</kbd> suggestie bevestigen · <kbd>c</kbd> andere categorie · <kbd>r</kbd> regel maken · <kbd>v</kbd> transacties tonen</div>
+    <div class="muted small kbd-hint" style="margin:-4px 0 12px">⌨️ <kbd>j</kbd>/<kbd>k</kbd> bladeren · <kbd>Enter</kbd> suggestie bevestigen · <kbd>c</kbd> andere categorie · <kbd>r</kbd> regel maken · <kbd>v</kbd> transacties tonen</div>
     <div class="stack" id="rvlist">${groups.map(g => {
       const sug = g.suggestions.slice(0, 2);
       return `<div class="card rv" data-merchant="${esc(g.merchant)}" data-ids="${g.ids.join(',')}">
@@ -118,19 +118,27 @@ V.transactions = async () => {
   const m = render(`
     <div class="filters">
       <input type="search" id="q" aria-label="Zoeken in transacties" placeholder="Zoek op naam, omschrijving, IBAN…  ( / )" value="${esc(f.q || '')}">
+      <button class="btn filters-toggle" id="ftoggle" aria-expanded="false">${icon('settings')} Filters<span id="fcount"></span></button>
+      <div class="fx">
       ${catSelect(f.category === 'none' ? '' : Number(f.category) || null, { none: 'Alle categorieën', attrs: 'id="fcat"' }).replace('</optgroup></select>', '</optgroup><option value="none" ' + (f.category === 'none' ? 'selected' : '') + '>❔ Zonder categorie</option></select>')}
       ${S.accounts.length > 1 ? `<select id="facc"><option value="">Alle rekeningen</option>${S.accounts.map(a => `<option value="${a.id}" ${String(f.account) === String(a.id) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>` : ''}
       <div class="seg" id="ftype">${[['', 'Alles'], ['out', 'Uit'], ['in', 'In']].map(([v, l]) => `<button data-v="${v}" class="${(f.type || '') === v ? 'on' : ''}">${l}</button>`).join('')}</div>
       <div class="seg" id="fscope"><button data-v="month" class="${!showAll ? 'on' : ''}">${esc(monthName(S.month || ''))}</button><button data-v="all" class="${showAll ? 'on' : ''}">Alle maanden</button></div>
       <span class="row small muted" style="gap:4px"><input type="date" id="dfrom" aria-label="Vanaf datum" value="${esc(f.from || '')}"> – <input type="date" id="dto" aria-label="Tot en met datum" value="${esc(f.to || '')}">${f.from || f.to ? ' <a href="#" id="clrd">✕</a>' : ''}</span>
       <label class="row small"><input type="checkbox" id="frev" ${f.status === 'review' ? 'checked' : ''}> Alleen te beoordelen</label>
+      </div>
       ${f.merchant ? `<span class="chip" style="--c:#0a84ff">Tegenpartij: ${esc(f.merchant)} <a href="#" id="clrm">✕</a></span>` : ''}
     </div>
-    <div class="card" style="padding:0"><div class="tablewrap"><table class="txtable"><thead><tr>
+    <div class="card" style="padding:0"><div class="tablewrap"><table class="st txtable"><thead><tr>
       <th style="width:30px"><input type="checkbox" id="selall"></th>
       <th class="sortable" data-sort="date">Datum</th><th class="sortable" data-sort="payee">Tegenpartij</th><th>Categorie</th><th class="sortable num" data-sort="amount">Bedrag</th></tr></thead>
       <tbody id="rows"></tbody></table></div><div class="row between" style="padding:10px 16px;border-top:1px solid var(--line)"><span class="muted small" id="summary"></span><button class="btn sm" id="more" hidden>Meer laden</button></div></div>
     <div id="bulk"></div>`);
+  // Filters: op smalle schermen ingeklapt achter één knop; het aantal actieve filters staat erop.
+  const nf = [f.category, f.account, f.type, f.from || f.to, f.status === 'review'].filter(Boolean).length;
+  $('#fcount').textContent = nf ? ` · ${nf}` : '';
+  if (nf && pref.get('fopen') === '1') $('.filters').classList.add('open');
+  $('#ftoggle').onclick = () => { const o = $('.filters').classList.toggle('open'); $('#ftoggle').setAttribute('aria-expanded', o); pref.set('fopen', o ? '1' : '0'); };
   const query = off => {
     const p = new URLSearchParams({ sort: f.sort, dir: f.dir, offset: off, limit: 300 });
     if (!showAll) p.set('month', S.month); if (f.month && !f.all) p.set('month', f.month);

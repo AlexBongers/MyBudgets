@@ -26,10 +26,37 @@ function applyTheme(t) {
 const S = { tab: 'dashboard', month: null, cats: [], months: [], accounts: [], review: 0, txFilter: {}, hasData: false };
 const catById = id => S.cats.find(c => c.id === id);
 
+// Navigatieteller: antwoorden op GET-verzoeken van een scherm dat al verlaten is worden genegeerd (geen flikkering
+// of verkeerd scherm als je snel tikt). guard() slikt die stille fout in.
+let NAV = 0;
+const staleErr = () => Object.assign(new Error('verouderd'), { stale: true });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function httpApi(method, path, body) {
+  const ctl = new AbortController(), big = body && body.base64;
+  const timer = setTimeout(() => ctl.abort(), big ? 180000 : 30000);
+  let r;
+  try {
+    r = await fetch('/api' + path, { method, signal: ctl.signal, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: method === 'GET' || method === 'DELETE' ? undefined : JSON.stringify(body || {}) });
+  } catch (e) {
+    throw Object.assign(new Error(e.name === 'AbortError' ? 'De server reageert niet (time-out)' : navigator.onLine === false ? 'Geen internetverbinding' : 'Geen verbinding met de server'), { network: true });
+  } finally { clearTimeout(timer); }
+  const text = await r.text(); let j = null;
+  try { j = text ? JSON.parse(text) : {}; } catch { /* geen JSON, bijv. een proxy-foutpagina */ }
+  if (r.status === 401) throw new Error('Niet (meer) ingelogd — herlaad de pagina');
+  if (!r.ok) throw Object.assign(new Error(j?.error || (r.status >= 502 ? 'De server is even niet bereikbaar' : `Fout ${r.status}`)), { status: r.status, network: r.status >= 502 });
+  if (j === null) throw new Error('Onverwacht antwoord van de server');
+  return j;
+}
 async function api(method, path, body) {
-  if (window.native) return window.native.api(method, '/api' + path, body);
-  const r = await fetch('/api' + path, { method, headers: { 'Content-Type': 'application/json' }, body: method === 'GET' || method === 'DELETE' ? undefined : JSON.stringify(body || {}) });
-  const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Fout'); return j;
+  const seq = NAV;
+  let res;
+  if (window.native) res = await window.native.api(method, '/api' + path, body);
+  else {
+    try { res = await httpApi(method, path, body); }
+    catch (e) { if (method !== 'GET' || !e.network) throw e; await sleep(900); res = await httpApi(method, path, body); }   // lezen: één keer opnieuw (bijv. server herstart)
+  }
+  if (method === 'GET' && seq !== NAV) throw staleErr();
+  return res;
 }
 const GET = p => api('GET', p), POST = (p, b) => api('POST', p, b), PUT = (p, b) => api('PUT', p, b), PATCH = (p, b) => api('PATCH', p, b), DEL = p => api('DELETE', p);
 
@@ -48,7 +75,7 @@ async function doUndo() {
   const id = lastUndo; lastUndo = null;
   try { await POST('/undo', { id }); await refreshMeta(); toast('Ongedaan gemaakt'); go(S.tab); } catch (e) { toast('⚠ ' + e.message); }
 }
-const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { console.error(e); toast('⚠ ' + (e.message || 'Er ging iets mis')); } };
+const guard = fn => async (...a) => { try { return await fn(...a); } catch (e) { if (e?.stale) return; console.error(e); toast('⚠ ' + (e.message || 'Er ging iets mis')); } };
 
 function catChip(c, extra = '') {
   if (!c) return `<span class="chip" style="--c:#9ca3af">❔ Geen categorie</span>`;
@@ -71,7 +98,7 @@ function catSelect(value, { none = '— geen —', cls = 'cat-input', attrs = ''
 function modal(html, { wide } = {}) {
   const root = $('#modal-root');
   const el = document.createElement('div'); el.className = 'overlay';
-  el.innerHTML = `<div class="modal" ${wide ? 'style="width:min(760px,94vw)"' : ''} role="dialog" aria-modal="true">${html}</div>`;
+  el.innerHTML = `<div class="modal" tabindex="-1" ${wide ? 'style="width:min(760px,94vw)"' : ''} role="dialog" aria-modal="true">${html}</div>`;
   const opener = document.activeElement; // na sluiten keert de focus daarheen terug
   const close = () => { el.remove(); document.removeEventListener('keydown', onKey); if (opener && opener.isConnected && opener.focus) opener.focus(); };
   const onKey = e => {
@@ -86,9 +113,10 @@ function modal(html, { wide } = {}) {
   };
   document.addEventListener('keydown', onKey);
   el.addEventListener('mousedown', e => { if (e.target === el) close(); });
-  root.appendChild(el);
+  root.appendChild(el); fillCharts(el);
   $$('[data-close]', el).forEach(b => b.addEventListener('click', close));
-  const first = $('input:not([type=checkbox]),select,textarea', el); if (first) first.focus();
+  // Op touchscreens niet automatisch een veld focussen: dat klapt ongevraagd het toetsenbord uit.
+  const first = $('input:not([type=checkbox]),select,textarea', el); if (first && !matchMedia('(pointer:coarse)').matches) first.focus(); else el.querySelector('.modal').focus?.();
   return { el, close, $: s => $(s, el), $$: s => $$(s, el) };
 }
 function ask(title, message, okLabel = 'OK', danger = false) {
@@ -99,7 +127,18 @@ function ask(title, message, okLabel = 'OK', danger = false) {
     $$('[data-close]', m.el).forEach(b => b.addEventListener('click', () => res(false)));
   });
 }
-function render(html) { const m = $('#main'); m.innerHTML = `<div class="page">${html}</div>`; return m; }
+// Grafieken worden op hun echte breedte getekend (leesbare labels op telefoon én breed scherm).
+// chartBox() geeft een plaatshouder; render()/fillCharts() tekent hem zodra de breedte bekend is.
+const CHARTS = new Map(); let chartSeq = 0;
+function chartBox(draw) { const id = ++chartSeq; CHARTS.set(id, draw); return `<div class="chart" data-chart="${id}"></div>`; }
+function fillCharts(root = document) {
+  root.querySelectorAll('.chart[data-chart]').forEach(el => {
+    const id = +el.dataset.chart, draw = CHARTS.get(id); if (!draw) return;
+    el.innerHTML = draw(Math.max(260, Math.round(el.clientWidth || 600))); delete el.dataset.chart; CHARTS.delete(id);
+  });
+  if (CHARTS.size > 50) CHARTS.clear();
+}
+function render(html) { const m = $('#main'); m.innerHTML = `<div class="page">${html}</div>`; fillCharts(m); return m; }
 
 const ICONS = {
   dashboard: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>',
@@ -111,6 +150,9 @@ const ICONS = {
   reports: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   categories: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
   import: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  more: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+  search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  detail: '<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
   settings: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
 };
 const icon = n => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;

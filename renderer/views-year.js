@@ -31,9 +31,9 @@ V.year = async () => {
     </div>
     <div class="grid g2" style="margin-bottom:16px">
       <div class="card"><h2>Uitgaven per categorie <span class="right muted">${d.prevComplete ? `t.o.v. ${d.year - 1}${d.partial ? ' (zelfde periode)' : ''}` : ''}</span></h2>
-        <div class="row" style="gap:16px;align-items:flex-start;flex-wrap:nowrap">${donut(d.byCategory.slice(0, 12))}
+        <div class="row donut-row" style="gap:16px;align-items:flex-start;flex-wrap:nowrap">${donut(d.byCategory.slice(0, 12))}
         <div class="legend">${d.byCategory.slice(0, 10).map(c => `<div class="li" data-cat="${c.id ?? ''}"><span><i class="dot" style="background:${c.color}"></i> ${c.icon} ${esc(c.name)} <span class="faint small">${pct(c.value, totalCat)}%</span></span><span class="nowrap"><b>${eur0(c.value)}</b> ${d.prevComplete && c.prev && Math.abs(c.value - c.prev) > c.prev * 0.05 ? deltaChip(c.value, c.prev, true) : ''}</span></div>`).join('')}</div></div></div>
-      <div class="card"><h2>Verloop per categorie <span class="right muted">jan – dec</span></h2><table>${d.byCategory.filter(c => d.catMonths[c.id]).map(c => `<tr data-cat="${c.id}" style="cursor:default"><td>${c.icon} ${esc(c.name)}</td><td>${sparkline(d.catMonths[c.id].slice(0, d.partial ? tm : 12), 110, 26, c.color)}</td><td class="num"><b>${eur0(c.value)}</b></td><td class="num muted small">${eur0(c.value / monthsDone)}/mnd</td></tr>`).join('') || '<tr><td class="empty">Geen data</td></tr>'}</table></div>
+      <div class="card"><h2>Verloop per categorie <span class="right muted">jan – dec</span></h2><table>${d.byCategory.filter(c => d.catMonths[c.id]).map(c => `<tr data-cat="${c.id}" style="cursor:default"><td>${c.icon} ${esc(c.name)}</td><td>${sparkline(d.catMonths[c.id].slice(0, d.partial ? tm : 12), 110, 26, c.color)}</td><td class="num"><b>${eur0(c.value)}</b></td><td class="num muted small hide-c">${eur0(c.value / monthsDone)}/mnd</td></tr>`).join('') || '<tr><td class="empty">Geen data</td></tr>'}</table></div>
     </div>
     <div class="grid g2">
       <div class="card"><h2>Top tegenpartijen</h2><table>${d.topPayees.map(x => `<tr data-payee="${esc(x.merchant)}" style="cursor:default"><td>${x.icon} ${esc(x.payee)}</td><td class="muted small">${x.n}×</td><td class="num"><b>${eur0(x.value)}</b></td></tr>`).join('')}</table></div>

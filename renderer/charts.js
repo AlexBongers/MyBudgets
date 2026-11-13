@@ -3,8 +3,11 @@
 function niceMax(v) { if (v <= 0) return 100; const p = Math.pow(10, Math.floor(Math.log10(v))); const n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
 const axisEur = c => { const e = c / 100; return e >= 1000 ? (e / 1000).toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + 'k' : String(Math.round(e)); };
 
-function barChart(trend, selected) {
-  const W = 680, H = 230, pad = { l: 42, r: 6, t: 10, b: 24 };
+// Grafieken met assen tekenen op hun werkelijke breedte W (via chartBox), zodat labels altijd ~11px zijn.
+const chartH = (W, max, min = 160) => Math.round(Math.min(max, Math.max(min, W * 0.52)));
+function barChart(trend, selected) { return chartBox(W => barSvg(trend, selected, W)); }
+function barSvg(trend, selected, W) {
+  const H = chartH(W, 230), pad = { l: 42, r: 6, t: 10, b: 24 };
   const max = niceMax(Math.max(1, ...trend.flatMap(t => [t.income, t.expenses])));
   const bw = (W - pad.l - pad.r) / trend.length, y = v => pad.t + (H - pad.t - pad.b) * (1 - v / max);
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Inkomsten en uitgaven per maand">`;
@@ -15,7 +18,7 @@ function barChart(trend, selected) {
     s += `<g data-month="${t.month}" style="cursor:default"><rect x="${x}" y="${pad.t}" width="${bw}" height="${H - pad.t - pad.b}" fill="transparent"/>`
       + `<rect x="${x + bw * 0.12}" y="${y(t.income)}" width="${w}" height="${Math.max(0, y(0) - y(t.income))}" fill="var(--good)" rx="3"><title>${monthName(t.month)}: inkomsten ${eur(t.income)}</title></rect>`
       + `<rect x="${x + bw * 0.12 + w + 2}" y="${y(t.expenses)}" width="${w}" height="${Math.max(0, y(0) - y(t.expenses))}" fill="var(--bad)" rx="3" opacity=".85"><title>${monthName(t.month)}: uitgaven ${eur(t.expenses)}</title></rect></g>`
-      + `<text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle" ${sel ? 'style="fill:var(--text);font-weight:600"' : ''}>${monthShort(t.month)}</text>`;
+      + (bw >= 22 || sel || i % 2 === (trend.length - 1) % 2 ? `<text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle" ${sel ? 'style="fill:var(--text);font-weight:600"' : ''}>${monthShort(t.month)}</text>` : '');
   });
   return s + '</svg>';
 }
@@ -35,8 +38,9 @@ function donut(items, size = 170) {
 }
 
 // Cumulatieve uitgaven per dag: deze maand vs vorige maand, met budgetlijn.
-function lineChart({ month, prev, days }, budget, projection) {
-  const W = 680, H = 210, pad = { l: 42, r: 8, t: 10, b: 22 };
+function lineChart(data, budget, projection) { return chartBox(W => lineSvg(data, budget, projection, W)); }
+function lineSvg({ month, prev, days }, budget, projection, W) {
+  const H = chartH(W, 210), pad = { l: 42, r: 8, t: 10, b: 22 };
   const max = niceMax(Math.max(1, ...month, ...prev, budget || 0, projection || 0) * 1.02);
   const x = d => pad.l + (W - pad.l - pad.r) * (d / (days - 1)), y = v => pad.t + (H - pad.t - pad.b) * (1 - v / max);
   const path = a => a.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join('');
@@ -66,8 +70,9 @@ function progressBar(spent, budget) {
 }
 
 // Staafdiagram met één reeks (bijv. uitgaven per maand voor één categorie). Klikbaar via data-month.
-function monthBars(monthly, color = 'var(--accent)') {
-  const W = 680, H = 200, pad = { l: 42, r: 6, t: 10, b: 24 };
+function monthBars(monthly, color = 'var(--accent)') { return chartBox(W => monthBarsSvg(monthly, color, W)); }
+function monthBarsSvg(monthly, color, W) {
+  const H = chartH(W, 200), pad = { l: 42, r: 6, t: 10, b: 24 };
   const max = niceMax(Math.max(1, ...monthly.map(m => Math.abs(m.value))));
   const bw = (W - pad.l - pad.r) / monthly.length, y = v => pad.t + (H - pad.t - pad.b) * (1 - v / max);
   const avg = monthly.reduce((a, m) => a + m.value, 0) / monthly.length;
@@ -75,15 +80,16 @@ function monthBars(monthly, color = 'var(--accent)') {
   for (let i = 0; i <= 4; i++) { const v = max * i / 4; s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${axisEur(v)}</text>`; }
   monthly.forEach((m, i) => {
     const x = pad.l + i * bw, h = Math.max(0, y(0) - y(Math.max(0, m.value)));
-    s += `<g data-month="${m.month}"><rect x="${x}" y="${pad.t}" width="${bw}" height="${H - pad.t - pad.b}" fill="transparent"/><rect x="${x + bw * 0.15}" y="${y(Math.max(0, m.value))}" width="${bw * 0.7}" height="${h}" fill="${color}" rx="4"><title>${monthName(m.month)}: ${eur(m.value)}</title></rect></g><text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle">${monthShort(m.month)}</text>`;
+    s += `<g data-month="${m.month}"><rect x="${x}" y="${pad.t}" width="${bw}" height="${H - pad.t - pad.b}" fill="transparent"/><rect x="${x + bw * 0.15}" y="${y(Math.max(0, m.value))}" width="${bw * 0.7}" height="${h}" fill="${color}" rx="4"><title>${monthName(m.month)}: ${eur(m.value)}</title></rect></g>${bw >= 22 || i % 2 === (monthly.length - 1) % 2 ? `<text x="${x + bw / 2}" y="${H - 7}" text-anchor="middle">${monthShort(m.month)}</text>` : ''}`;
   });
   if (avg > 0) s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(avg)}" y2="${y(avg)}" stroke="var(--warn)" stroke-dasharray="5 4"/><text x="${W - pad.r}" y="${y(avg) - 4}" text-anchor="end" style="fill:var(--warn)">gem. ${eur0(avg)}</text>`;
   return s + '</svg>';
 }
 
 // Lijn met vlak eronder, voor saldo-verloop. points: [{date, balance}] (op volgorde, ongelijke tussenpozen).
-function areaChart(points) {
-  const W = 680, H = 210, pad = { l: 46, r: 8, t: 10, b: 22 };
+function areaChart(points) { return chartBox(W => areaSvg(points, W)); }
+function areaSvg(points, W) {
+  const H = chartH(W, 210), pad = { l: 46, r: 8, t: 10, b: 22 };
   const t0 = Date.parse(points[0].date), t1 = Date.parse(points.at(-1).date) || t0 + 1;
   let lo = Math.min(...points.map(p => p.balance)), hi = Math.max(...points.map(p => p.balance));
   const span = Math.max(1, hi - lo); lo -= span * 0.08; hi += span * 0.08;
@@ -91,8 +97,8 @@ function areaChart(points) {
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(p.date).toFixed(1)} ${y(p.balance).toFixed(1)}`).join('');
   let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Saldo-verloop">`;
   for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4; s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${axisEur(v)}</text>`; }
-  const seen = new Set();
-  points.forEach(p => { const mo = p.date.slice(0, 7); if (!seen.has(mo) && p.date.slice(8) <= '10') { seen.add(mo); s += `<text x="${x(p.date)}" y="${H - 5}" text-anchor="middle">${monthShort(mo)}</text>`; } });
+  const seen = new Set(); let lastX = -99;
+  points.forEach(p => { const mo = p.date.slice(0, 7), px = x(p.date); if (!seen.has(mo) && p.date.slice(8) <= '10') { seen.add(mo); if (px - lastX >= 30) { lastX = px; s += `<text x="${px}" y="${H - 5}" text-anchor="middle">${monthShort(mo)}</text>`; } } });
   s += `<path d="${line}L${x(points.at(-1).date).toFixed(1)} ${y(lo)}L${x(points[0].date).toFixed(1)} ${y(lo)}Z" fill="var(--accent-soft)"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>`;
   points.forEach(p => { s += `<circle cx="${x(p.date).toFixed(1)}" cy="${y(p.balance).toFixed(1)}" r="6" fill="transparent"><title>${fmtDate(p.date)}: ${eur(p.balance)}</title></circle>`; });
   const last = points.at(-1); s += `<circle cx="${x(last.date)}" cy="${y(last.balance)}" r="4" fill="var(--accent)"/>`;
