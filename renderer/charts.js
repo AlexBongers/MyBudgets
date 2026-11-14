@@ -112,3 +112,39 @@ function areaSvg(points, W) {
   const last = points.at(-1); s += `<circle cx="${x(last.date)}" cy="${y(last.balance)}" r="5" fill="var(--accent)" stroke="var(--card)" stroke-width="2"/>`;
   return s + '</svg>';
 }
+
+// Staven met positieve en negatieve waarden rond een nullijn. items: [{label, value, tip, strong}]
+function signedBars(items, { height = 200 } = {}) { return chartBox(W => signedBarsSvg(items, W, height)); }
+function signedBarsSvg(items, W, maxH) {
+  const H = chartH(W, maxH, 150), pad = { l: 44, r: 6, t: 10, b: 24 };
+  const hi = niceMax(Math.max(1, ...items.map(i => i.value))), lo = Math.min(0, ...items.map(i => i.value)) < 0 ? -niceMax(-Math.min(...items.map(i => i.value))) : 0;
+  const y = v => pad.t + (H - pad.t - pad.b) * (1 - (v - lo) / (hi - lo)), bw = (W - pad.l - pad.r) / items.length, w = Math.min(34, bw * 0.62);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">`;
+  const ticks = lo < 0 ? [lo, lo / 2, 0, hi / 2, hi] : [0, hi / 4, hi / 2, hi * 3 / 4, hi];
+  for (const v of ticks) s += `${gridLine(pad.l, W - pad.r, y(v), v === 0)}<text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${v < 0 ? '−' : ''}${axisEur(Math.abs(v))}</text>`;
+  items.forEach((it, i) => {
+    const x = pad.l + i * bw + (bw - w) / 2, pos = it.value >= 0, h = Math.abs(y(it.value) - y(0));
+    const d = pos ? barPath(x, y(it.value), w, h) : `M${x.toFixed(1)} ${y(0).toFixed(1)}H${(x + w).toFixed(1)}V${(y(it.value) - Math.min(4, h)).toFixed(1)}Q${(x + w).toFixed(1)} ${y(it.value).toFixed(1)} ${(x + w - Math.min(4, w / 2)).toFixed(1)} ${y(it.value).toFixed(1)}H${(x + Math.min(4, w / 2)).toFixed(1)}Q${x.toFixed(1)} ${y(it.value).toFixed(1)} ${x.toFixed(1)} ${(y(it.value) - Math.min(4, h)).toFixed(1)}Z`;
+    if (h > 0.5) s += `<path d="${d}" fill="${pos ? 'var(--inc)' : 'var(--exp)'}" ${it.strong === false ? 'opacity=".55"' : ''}><title>${esc(it.tip || it.label)}</title></path>`;
+    if (bw >= 22 || i % 2 === 0) s += `<text x="${x + w / 2}" y="${H - 7}" text-anchor="middle" ${it.mark ? 'style="fill:var(--text);font-weight:600"' : ''}>${esc(it.label)}</text>`;
+  });
+  return s + '</svg>';
+}
+// Lijn rond een nullijn (bijv. saldo over de voorgaande 12 maanden). points: [{month, value}]
+function signedLine(points) { return chartBox(W => signedLineSvg(points, W)); }
+function signedLineSvg(points, W) {
+  const H = chartH(W, 210), pad = { l: 46, r: 10, t: 12, b: 22 };
+  const hi = niceMax(Math.max(1, ...points.map(p => p.value))), mn = Math.min(0, ...points.map(p => p.value)), lo = mn < 0 ? -niceMax(-mn) : 0;
+  const x = i => pad.l + (W - pad.l - pad.r) * (points.length > 1 ? i / (points.length - 1) : 0.5), y = v => pad.t + (H - pad.t - pad.b) * (1 - (v - lo) / (hi - lo));
+  const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join('');
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Saldo over de voorgaande twaalf maanden">`;
+  for (const v of (lo < 0 ? [lo, 0, hi / 2, hi] : [0, hi / 3, hi * 2 / 3, hi])) s += `${gridLine(pad.l, W - pad.r, y(v), v === 0)}<text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${v < 0 ? '−' : ''}${axisEur(Math.abs(v))}</text>`;
+  let lastX = -99; points.forEach((p, i) => { if (p.month.endsWith('-01') && x(i) - lastX > 36) { lastX = x(i); s += `<text x="${x(i)}" y="${H - 5}" text-anchor="middle">${p.month.slice(0, 4)}</text>`; } });
+  const gid = 'sl' + Math.random().toString(36).slice(2, 7);
+  s += `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--accent)" stop-opacity=".2"/><stop offset="1" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>`;
+  if (points.length > 1) s += `<path d="${line}L${x(points.length - 1).toFixed(1)} ${y(0).toFixed(1)}L${x(0).toFixed(1)} ${y(0).toFixed(1)}Z" fill="url(#${gid})"/>`;
+  s += `<path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linejoin="round"/>`;
+  points.forEach((p, i) => { s += `<circle cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="7" fill="transparent"><title>12 maanden t/m ${monthName(p.month)}: ${eurSigned(p.value)}</title></circle>`; });
+  const last = points[points.length - 1]; s += `<circle cx="${x(points.length - 1)}" cy="${y(last.value)}" r="5" fill="var(--accent)" stroke="var(--card)" stroke-width="2"/>`;
+  return s + '</svg>';
+}

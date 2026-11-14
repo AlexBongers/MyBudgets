@@ -404,3 +404,43 @@ button,a,select,input,label,.li,[data-month],[data-cat],[data-payee],[data-tx],t
   .txtable td:nth-child(3) .ellipsis{max-width:200px!important}
   .budtable th:nth-child(2),.budtable td:nth-child(2){width:16%}
 }
+
+/* ---- Inzichten ---- */
+.ins-lead{color:var(--muted);margin:0 0 16px;max-width:72ch}
+.find-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:22px}
+.finding{all:unset;box-sizing:border-box;display:flex;flex-direction:column;gap:5px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px 20px;box-shadow:var(--shadow);cursor:default;position:relative;overflow:hidden;transition:transform .15s,box-shadow .15s,border-color .15s}
+.finding:hover{transform:translateY(-2px);border-color:var(--line-strong)}
+.finding:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.finding .kick{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500;color:var(--muted)}
+.finding .kick i{font-style:normal;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--hover);color:var(--muted)}
+.finding.good .kick i{background:var(--good-bg);color:var(--good)}.finding.warn .kick i{background:var(--warn-bg);color:var(--warn)}
+.finding .val{font:600 30px/1.1 var(--display);letter-spacing:-.015em;font-variation-settings:"opsz" 72,"SOFT" 30;font-variant-numeric:lining-nums;margin-top:4px}
+.finding.good .val{color:var(--good)}
+.finding b{font-size:15px;font-weight:600;line-height:1.3;margin-top:2px}
+.finding .txt{color:var(--muted);font-size:13px;line-height:1.5}
+.finding.lead{grid-column:span 2;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 9%,var(--card)),var(--card) 60%)}
+.finding.lead .val{font-size:44px}.finding.lead b{font-size:18px}.finding.lead .txt{font-size:14px;max-width:62ch}
+.ins-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+.ins-sec{min-width:0;scroll-margin-top:12px;transition:box-shadow .3s,border-color .3s}
+.ins-sec.wide{grid-column:1/-1}
+.ins-sec.flash{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.ins-sec h3{font-size:12.5px;font-weight:500;color:var(--muted);margin:16px 0 4px}.ins-sec h3:first-of-type{margin-top:0}
+.ins-sec table td{padding-left:0;padding-right:8px}.ins-sec table td:last-child,.ins-sec table th:last-child{padding-right:0}.ins-sec table th{padding-left:0}
+.divs{display:flex;flex-direction:column;gap:2px}
+.divrow{display:grid;grid-template-columns:minmax(0,11rem) minmax(0,1fr) 5.5rem;gap:12px;align-items:center;padding:6px 8px;margin:0 -8px;border-radius:8px}
+.divrow:hover,.mrow[data-payee]:hover{background:var(--hover)}
+.divbar{position:relative;height:14px;background:linear-gradient(var(--line-strong),var(--line-strong)) 50% 0/1px 100% no-repeat}
+.divbar i{position:absolute;top:2px;bottom:2px;border-radius:3px}
+.divbar i.up{left:50%;background:var(--exp);border-radius:0 4px 4px 0}.divbar i.down{right:50%;background:var(--inc);border-radius:4px 0 0 4px}
+.mrow{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 4.8rem;gap:12px;align-items:center;padding:6px 8px;margin:0 -8px;border-radius:8px}
+.ybars{display:flex;flex-direction:column;gap:7px}
+.ybars>div{display:grid;grid-template-columns:2.6rem minmax(0,1fr) 4.6rem 2.4rem;gap:10px;align-items:center}
+.bignum{font:600 24px/1.1 var(--display);letter-spacing:-.01em;font-variation-settings:"opsz" 72}
+@container main (max-width:880px){.ins-grid{grid-template-columns:minmax(0,1fr)}}
+@container main (max-width:640px){
+  .find-grid{grid-template-columns:minmax(0,1fr);gap:10px}.finding.lead{grid-column:auto}.finding.lead .val{font-size:34px}.finding .val{font-size:26px}
+  .ins-grid{gap:10px}
+  .divrow{grid-template-columns:minmax(0,1fr) 5.2rem;row-gap:4px}.divrow .divbar{grid-column:1/-1;grid-row:2}
+  .mrow{grid-template-columns:minmax(0,1fr) 4.8rem;row-gap:4px}.mrow .bar{grid-column:1/-1;grid-row:2}
+  .ins-sec table.st tr{padding:10px 0}
+}
