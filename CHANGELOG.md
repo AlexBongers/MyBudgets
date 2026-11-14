@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.11.0
+- **Frisse, moderne look**: licht koel grijs met witte kaarten en een indigo accent (donker: diep blauwzwart), actieve navigatie als getint vlak, knoppen met een subtiel verloop.
+- **Eén lettertype (Geist) voor alles**: het schreeflettertype voor titels en grote bedragen is weg; bedragen staan nu in strakke, goed leesbare cijfers met vaste breedte.
+
 ## 2.10.0
 - **Inzichten** (nieuw scherm): de app zoekt zelf naar patronen in al je transacties en zet de belangrijkste bevindingen bovenaan, met daaronder de onderbouwing. Onder meer: saldo over twaalf maanden en verwachting voor het lopende jaar, seizoenspatroon (maanden met extra inkomen), verschuivingen per categorie, gewoontes (hoe vaak × hoe duur), vaste lasten die duurder werden, stopten of nieuw zijn, eenmalige grote uitgaven tegenover je gewone maand, contant geld, achteraf betalen, retouren, kleine bedragen, weekritme en betrouwbaarheid van de gegevens.
 - Alles wordt live uit je eigen database berekend (`src/insights.js`, `GET /api/insights`); verschillende schrijfwijzen van dezelfde winkel (bijv. met `BCK*` ervoor) worden daarbij samengevoegd.

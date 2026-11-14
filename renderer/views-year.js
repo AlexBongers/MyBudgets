@@ -12,7 +12,7 @@ V.year = async () => {
   const cmp = !d.prevComplete ? 'geen vergelijking: vorig jaar niet volledig' : d.partial ? `t/m ${fmtDate(d.to)} · ${deltaWord(d.year)}` : deltaWord(d.year);
   const m = render(`
     <div class="row between" style="margin-bottom:16px">
-      <div class="row"><button class="icon-btn" id="yprev" ${d.years.includes(String(d.year - 1)) ? '' : 'disabled'} aria-label="Vorig jaar">‹</button><h2 style="margin:0 4px;font:600 32px/1 var(--display);letter-spacing:-.02em;color:var(--text)">${d.year}</h2>
+      <div class="row"><button class="icon-btn" id="yprev" ${d.years.includes(String(d.year - 1)) ? '' : 'disabled'} aria-label="Vorig jaar">‹</button><h2 style="margin:0 4px;font:700 28px/1 var(--ui);letter-spacing:-.04em;font-variant-numeric:tabular-nums;color:var(--text)">${d.year}</h2>
         <button class="icon-btn" id="ynext" ${d.years.includes(String(+d.year + 1)) ? '' : 'disabled'} aria-label="Volgend jaar">›</button>
         ${d.partial ? `<span class="tag blue">loopt nog — t/m ${fmtDate(d.to)}</span>` : ''}</div>
       <div class="seg" id="yseg">${[...d.years].reverse().map(y => `<button data-y="${y}" class="${y === d.year ? 'on' : ''}">${y}</button>`).join('')}</div>
