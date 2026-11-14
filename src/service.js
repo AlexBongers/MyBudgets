@@ -9,6 +9,7 @@ import { parseRabobankCsv } from './rabobank.js';
 import { describeRule, AUTO_THRESHOLD } from './categorizer.js';
 import { loadTables, guessMapping, buildPlan, applyPlan, buildBudgetPlan, applyBudgetPlan } from './importer.js';
 import { createReports, REVIEW, GRP_ORDER } from './reports.js';
+import { computeInsights } from './insights.js';
 import { MONTH_RE as monthRe, httpErr } from './util.js';
 
 export { httpErr };
@@ -20,6 +21,7 @@ export function createApi(db, ctx = {}) {
   const R = createReports(db);
   const { q, one, latestMonth, budgetRows, accounts, recurring, dashboard, report, detail, listTransactions, review, yearOverview } = R;
   const run = (sql, ...p) => db.prepare(sql).run(...p);
+  let insightsCache = null;
   const unusedCategories = () => q(`SELECT c.id, c.name, c.icon, c.grp, c.kind FROM categories c
     WHERE COALESCE(c.key,'') NOT IN (${PROTECTED_KEYS.map(k => `'${k}'`).join(',')})
       AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.category_id=c.id) AND NOT EXISTS (SELECT 1 FROM splits s WHERE s.category_id=c.id)
@@ -300,6 +302,12 @@ export function createApi(db, ctx = {}) {
 
     'GET /api/dashboard': (_, __, u) => { let m = u.searchParams.get('month'); if (!monthRe.test(m || '')) m = latestMonth(); return dashboard(m); },
     'GET /api/year': (_, __, u) => yearOverview(u.searchParams.get('year')),
+    // Inzichten zijn zwaar om te berekenen; het resultaat blijft geldig tot er iets in de database verandert
+    'GET /api/insights': () => {
+      const v = one('SELECT total_changes() v').v;
+      if (!insightsCache || insightsCache.v !== v) insightsCache = { v, data: computeInsights(db) };
+      return insightsCache.data;
+    },
     'GET /api/report': (_, __, u) => { let m = u.searchParams.get('month'); if (!monthRe.test(m || '')) m = latestMonth(); return report(m, Math.min(24, Number(u.searchParams.get('months')) || 12)); },
     'GET /api/recurring': () => recurring(),
     // "Geen vaste last": zet een foutief herkende terugkerende betaling weg (en herstel)

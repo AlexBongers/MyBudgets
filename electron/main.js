@@ -145,7 +145,7 @@ function buildMenu() {
       { type: 'separator' }, { label: 'Zoek en ga naar…', accelerator: 'CmdOrCtrl+K', click: () => send({ action: 'palette' }) }, { label: 'Zoeken in transacties', accelerator: 'CmdOrCtrl+F', click: () => send({ action: 'search' }) }] },
     { label: 'Weergave', submenu: [
       nav('Dashboard', 'dashboard', 1), nav('Te beoordelen', 'review', 2), nav('Transacties', 'transactions', 3), nav('Budget', 'budget', 4),
-      nav('Vaste lasten', 'recurring', 5), nav('Rapporten', 'reports', 6), nav('Jaaroverzicht', 'year', 7), nav('Categorieën & regels', 'categories', 8), { type: 'separator' },
+      nav('Vaste lasten', 'recurring', 5), nav('Rapporten', 'reports', 6), nav('Jaaroverzicht', 'year', 7), nav('Inzichten', 'insights', 8), nav('Categorieën & regels', 'categories', 9), { type: 'separator' },
       { label: 'Vorige maand', accelerator: 'CmdOrCtrl+[', click: () => send({ action: 'month', delta: -1 }) },
       { label: 'Volgende maand', accelerator: 'CmdOrCtrl+]', click: () => send({ action: 'month', delta: 1 }) }, { type: 'separator' },
       { role: 'resetZoom', label: 'Standaardgrootte' }, { role: 'zoomIn', label: 'Inzoomen' }, { role: 'zoomOut', label: 'Uitzoomen' }, { type: 'separator' },

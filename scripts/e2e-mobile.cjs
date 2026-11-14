@@ -6,7 +6,7 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 
 const VIEWPORTS = { telefoon: [390, 844], cover: [344, 882], flip: [412, 915], uitgevouwen: [690, 829], pixelfold: [841, 701], liggend: [844, 390], desktop: [1366, 860] };
-const VIEWS = ['dashboard', 'review', 'transactions', 'budget', 'recurring', 'reports', 'year', 'categories', 'settings', 'import'];
+const VIEWS = ['dashboard', 'review', 'transactions', 'budget', 'recurring', 'reports', 'year', 'insights', 'categories', 'settings', 'import'];
 
 (async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mybudgets-mob-')), port = 3600 + Math.floor(Math.random() * 300);
@@ -38,7 +38,7 @@ const VIEWS = ['dashboard', 'review', 'transactions', 'budget', 'recurring', 're
     const p = await ctx.newPage(); p.on('pageerror', e => errs.push('interactie: ' + e.message));
     await p.goto(base); await p.waitForSelector('#main .page');
     await p.tap('#tabbar [data-more]'); await p.waitForSelector('.more-grid');
-    ok('Meer-sheet toont de overige schermen', (await p.locator('.more-grid button').count()) === 7);
+    ok('Meer-sheet toont de overige schermen', (await p.locator('.more-grid button').count()) === 8);
     await p.tap('.more-grid [data-tab=year]'); await p.waitForSelector('#yseg');
     ok('Meer blijft actief op een scherm uit de sheet', (await p.locator('#tabbar [data-more].on').count()) === 1);
     await p.tap('#tabbar [data-tab=transactions]'); await p.waitForSelector('#rows tr');
