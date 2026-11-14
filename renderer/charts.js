@@ -41,7 +41,7 @@ function donut(items, size = 170) {
     paths += `<path data-cat="${it.id ?? ''}" d="M${x0} ${y0}A${R} ${R} 0 ${large} 1 ${x1} ${y1}L${x2} ${y2}A${r} ${r} 0 ${large} 0 ${x3} ${y3}Z" fill="${it.color}" stroke="var(--card)" stroke-width="${items.length > 1 ? 2 : 0}" stroke-linejoin="round"><title>${esc(it.name)}: ${eur(it.value)} (${pct(it.value, total)}%)</title></path>`;
     a0 += (it.value / total) * Math.PI * 2;
   });
-  return `<svg viewBox="0 0 160 160" width="${size}" height="${size}" style="flex:none">${paths}<text x="80" y="74" text-anchor="middle" style="font-size:9px">Uitgaven</text><text x="80" y="93" text-anchor="middle" style="font:600 17px var(--display);fill:var(--text);letter-spacing:-.02em">${eur0(total)}</text></svg>`;
+  return `<svg viewBox="0 0 160 160" width="${size}" height="${size}" style="flex:none">${paths}<text x="80" y="74" text-anchor="middle" style="font-size:9px">Uitgaven</text><text x="80" y="93" text-anchor="middle" style="font:650 16px var(--ui);fill:var(--text);letter-spacing:-.03em">${eur0(total)}</text></svg>`;
 }
 
 // Cumulatieve uitgaven per dag: deze maand vs vorige maand, met budgetlijn.

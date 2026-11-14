@@ -135,7 +135,7 @@ HOST=0.0.0.0 PORT=3000 MYBUDGETS_PASSWORD='lang-wachtwoord' DB_PATH=/var/lib/myb
 electron/   hoofdproces (venster, menu, IPC, bestandsdialogen) + preload
 src/        rabobank (parser), normalize, merchants, categorizer, db (schema/migraties/schrijven), reports (leesmodel),
             service (API-routes), recurring, actual + importer + zip (Actual-import), util (gedeelde helpers), server (dev)
-renderer/   interface (vanilla JS/SVG, geen dependencies; lettertypen Geist en Fraunces lokaal in renderer/fonts, SIL OFL)
+renderer/   interface (vanilla JS/SVG, geen dependencies; lettertype Geist lokaal in renderer/fonts, SIL OFL)
 samples/    generate.js en rabobank-demo.csv (fictieve data)
 scripts/    bench.js
 test/       node:test
